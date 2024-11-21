@@ -2,6 +2,9 @@
 name = "asts"
 version = "0.1.0"
 edition = "2021"
+description = "asts"
+license = "MIT"
+repository ="https://github.com/keithyin/asts"
 
 [dependencies]
 clap = {version="4.4", features=["derive"]}
