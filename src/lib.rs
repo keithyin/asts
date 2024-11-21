@@ -143,9 +143,8 @@ pub fn align(
 
         for hit in hits {
             if hit.is_primary && !hit.is_supplementary {
-                let q_record = gskits::ds::ReadInfo::new_fa_record(subread.name.clone(), subread.seq.clone());
                 bam_record = Some(mm2::build_bam_record_from_mapping(
-                    &hit, &q_record, target_idx,
+                    &hit, subread, target_idx,
                 ));
             }
         }
