@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bio",
@@ -633,9 +633,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "gskits"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7861c846d941657b75f28242498f243a86f6e5b2a4e92cfc7d3bbcb6548ec82"
+checksum = "f08c015cbdfe99fed5a5b7a88d15eeb4530ebb8708b37f0438ebeb00d72d60e3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1067,15 +1067,16 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.3.4"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "201e92db4c6650851252346a17cc1961c60dea0c7ec304880eefb26266f53f50"
+checksum = "94c879c9c383a071d116ae35c3d1b3d30f5ff2b2c71713e26dfccbad95973b6e"
 dependencies = [
  "anyhow",
  "bio",
  "clap",
  "crossbeam",
  "glob",
+ "gskits",
  "indicatif",
  "lazy_static",
  "minimap2",
