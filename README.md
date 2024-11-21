@@ -7,6 +7,10 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 
 # chagelog
 
+## 0.3.0
+
+* add ch tag to bam record
+
 ## 0.2.1
 
 * worked
