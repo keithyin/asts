@@ -1,8 +1,8 @@
 use std::{collections::HashMap, fs, path, thread};
 
-use asts::{align_worker, cli::Cli, samtools::{self, sort_by_coordinates}, subreads_and_smc_generator};
+use asts::{align_worker, cli::Cli,  subreads_and_smc_generator};
 use clap::Parser;
-use gs_algo_lib_rs::{gsbam::fastx2bam::{fasta2bam, fastq2bam}, samtools::samtools_bai};
+use gskits::{fastx_reader::fastx2bam::{fasta2bam, fastq2bam}, samtools::{samtools_bai, sort_by_coordinates, sort_by_tag}};
 use rust_htslib::bam::Read;
 
 use time;
@@ -74,10 +74,10 @@ fn main() {
 
 
     tracing::info!("sorting sbr.bam {}", args.io_args.sbr);
-    let sorted_sbr = samtools::sort(&args.io_args.sbr, "ch");
+    let sorted_sbr = sort_by_tag(&args.io_args.sbr, "ch");
 
     tracing::info!("sorting smc.bam {}", smc_fname);
-    let sorted_smc = samtools::sort(&smc_fname, "ch");
+    let sorted_smc = sort_by_tag(&smc_fname, "ch");
 
     tmp_files.push(sorted_sbr.clone());
     tmp_files.push(sorted_smc.clone());
@@ -115,10 +115,10 @@ fn main() {
     });
 
     tracing::info!("sorting result bam");
-    sort_by_coordinates(&o_path);
+    sort_by_coordinates(&o_path, None);
 
     tracing::info!("indexing result bam");
-    samtools_bai(&o_path, true).unwrap();
+    samtools_bai(&o_path, true, None).unwrap();
 
 
     for tmp_file in tmp_files {

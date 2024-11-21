@@ -4,7 +4,8 @@ use crossbeam::channel::Sender;
 use rust_htslib::bam::Read;
 
 pub mod cli;
-
+use gskits::gsbam::bam_record_ext::BamRecordExt;
+use gskits::dna::reverse_complement;
 type BamRecord = rust_htslib::bam::record::Record;
 
 pub fn add(left: u64, right: u64) -> u64 {
@@ -18,7 +19,7 @@ pub struct Smc {
 
 impl Smc {
     pub fn from_bam_record(record: &rust_htslib::bam::Record) -> Self {
-        let record = gs_algo_lib_rs::gsbam::bam_ext::BamRecordExt::new(record);
+        let record = BamRecordExt::new(record);
 
         Self {
             name: record.get_qname(),
@@ -34,7 +35,7 @@ pub struct Subread {
 
 impl Subread {
     pub fn from_bam_record(record: &rust_htslib::bam::Record) -> Self {
-        let record = gs_algo_lib_rs::gsbam::bam_ext::BamRecordExt::new(record);
+        let record = BamRecordExt::new(record);
 
         Self {
             name: record.get_qname(),
@@ -45,7 +46,7 @@ impl Subread {
     pub fn reverse(&self) -> Self {
         Self {
             name: self.name.clone(),
-            seq: gs_algo_lib_rs::dna::reverse_complement(&self.seq),
+            seq: reverse_complement(&self.seq),
         }
     }
 }
