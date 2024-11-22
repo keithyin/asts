@@ -49,8 +49,8 @@ fn main() {
     let smc_fname = if args.io_args.smc.ends_with(".bam") {
         args.io_args.smc.clone()
     } else {
-        let delim = args.io_args.target_name_delim.as_ref().unwrap();
-        let channel_idx = args.io_args.channel_idx.unwrap();
+        let delim = args.io_args.target_name_delim.as_ref().expect(&format!("--tn-delim & --ch-idx need to be provided"));
+        let channel_idx = args.io_args.channel_idx.expect(&format!("--tn-delim & --ch-idx need to be provided"));
         if args.io_args.smc.ends_with("fq") || args.io_args.smc.ends_with("fastq") {
             tracing::info!("fastq2bam, {} -> .bam file", args.io_args.smc);
             fastq2bam(&args.io_args.smc, delim, channel_idx)
