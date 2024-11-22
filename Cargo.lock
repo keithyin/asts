@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -628,9 +628,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "gskits"
-version = "0.5.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f08c015cbdfe99fed5a5b7a88d15eeb4530ebb8708b37f0438ebeb00d72d60e3"
+checksum = "13d5b277d84a20249c5913e3c04cdc79945eaa042e4303614660846f6e81fe2d"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1062,9 +1062,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.7.1"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0971b3d0009b6cdce8f7ebb47d92118df120e880888977c37bcd0f95b848b520"
+checksum = "29f8386fe03b86575cef999ada35488f75b97013ad34d8ea4f58fff684d09ed8"
 dependencies = [
  "anyhow",
  "bio",

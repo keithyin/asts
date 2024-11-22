@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
+use minimap2::Aligner;
 use rust_htslib::bam::Read;
 
 pub mod cli;
 
+// cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
 
 pub struct SubreadsAndSmc {
@@ -110,14 +112,8 @@ pub fn align(
     subreads_and_smc: &SubreadsAndSmc,
     target_idx: &HashMap<String, (usize, usize)>,
 ) -> Vec<Option<BamRecord>> {
-    let mut aligner = minimap2::Aligner::builder()
-        .map_ont()
-        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-        .with_sam_out()
-        .with_index_threads(1);
 
-    aligner.idxopt.k = 7;
-    aligner.idxopt.w = 5;
+    let mut aligner = build_asts_aligner(subreads_and_smc.smc.seq.len() < 200);
 
     aligner = aligner
         .with_seq_and_id(
@@ -142,6 +138,7 @@ pub fn align(
         let mut bam_record = None;
 
         for hit in hits {
+            // no supp is needed !!
             if hit.is_primary && !hit.is_supplementary {
                 bam_record = Some(mm2::build_bam_record_from_mapping(
                     &hit, subread, target_idx,
@@ -151,6 +148,42 @@ pub fn align(
         bam_records.push(bam_record);
     }
     bam_records
+}
+
+
+/// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
+/// https://github.com/lh3/minimap2/blob/master/minimap.h
+fn build_asts_aligner(short_insert: bool) -> Aligner{
+    let mut aligner = Aligner::builder()
+        .map_ont()
+        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
+        .with_sam_out()
+        .with_index_threads(1);
+
+    aligner.idxopt.k = 7;
+    aligner.idxopt.w = 5;
+
+    // this is all map-ont default
+    // aligner.mapopt.zdrop = 400;
+    // aligner.mapopt.zdrop_inv = 200;
+    // aligner.mapopt.bw = 500;
+    // aligner.mapopt.end_bonus = 0;
+    
+    aligner.mapopt.best_n = 1;
+    aligner.mapopt.q_occ_frac = 0.0;
+
+
+    if short_insert {
+        aligner.idxopt.k = 4;
+        aligner.idxopt.w = 1;
+        aligner.mapopt.min_cnt = 2;
+        aligner.mapopt.min_dp_max = 10; // min dp score
+        aligner.mapopt.min_chain_score = 10; // this is important for short insert
+        aligner.mapopt.min_ksw_len = 0;
+    }
+
+    aligner
+
 }
 
 #[cfg(test)]
@@ -289,6 +322,44 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
             println!("ref2query {:?}", hit)
         }
 
+
+    }
+
+
+    #[test]
+    fn test_build_aligner() {
+
+        let aligner = build_asts_aligner(true);
+        println!("{:?}", aligner.idxopt);
+        println!("{:?}", aligner.mapopt);
+
+
+        let aligner = build_asts_aligner(false);
+        println!("{:?}", aligner.idxopt);
+        println!("{:?}", aligner.mapopt);
+
+
+    }
+
+    #[test]
+    fn test_short_insert() {
+
+        let mut aligner = build_asts_aligner(true);
+        println!("{:?}", aligner.idxopt);
+        println!("{:?}", aligner.mapopt);
+        println!("\n\n\n");
+
+        let ref_seq = "CCCCTTTTAAAAGGGGGAGAGA";
+        let q_seq = "CCCCTTTTAAAAGGGGGAGAGA";
+        aligner = aligner.with_seq(ref_seq.as_bytes()).unwrap();
+
+        for hit in aligner.map(q_seq.as_bytes(), false, false, None, None).unwrap(){
+            println!("{:?}", hit);
+        }
+
+        
+    
+    
 
     }
 
