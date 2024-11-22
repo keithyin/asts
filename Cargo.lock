@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1062,9 +1062,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94c879c9c383a071d116ae35c3d1b3d30f5ff2b2c71713e26dfccbad95973b6e"
+checksum = "0971b3d0009b6cdce8f7ebb47d92118df120e880888977c37bcd0f95b848b520"
 dependencies = [
  "anyhow",
  "bio",
@@ -1344,9 +1344,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.91"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "307e3004becf10f5a6e0d59d20f3cd28231b0e0827a96cd3e0ce6d14bc1e4bb3"
+checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
 ]
