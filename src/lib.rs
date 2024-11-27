@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
 use minimap2::Aligner;
+use mm2::params::InputFilterParams;
 use rust_htslib::bam::Read;
-
-pub mod cli;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
@@ -35,7 +34,9 @@ impl SubreadsAndSmc {
 pub fn subreads_and_smc_generator(
     sorted_sbr_bam: &str,
     sorted_smc_bam: &str,
+    input_filter_params: &InputFilterParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
+    
 ) {
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
     smc_bam_reader.set_threads(5).unwrap();
@@ -54,6 +55,12 @@ pub fn subreads_and_smc_generator(
         }
 
         let smc_record = smc_record_opt.unwrap().unwrap();
+
+        if !input_filter_params.valid(&smc_record) {
+            smc_record_opt = smc_records.next();
+            continue;
+        }
+
         let mut subreads_and_smc = SubreadsAndSmc::new(&smc_record);
         let smc = gskits::gsbam::bam_record_ext::BamRecordExt::new(&smc_record);
 
