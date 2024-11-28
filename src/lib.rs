@@ -4,7 +4,7 @@ use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
 use minimap2::Aligner;
 use mm2::params::InputFilterParams;
-use rust_htslib::bam::Read;
+use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
@@ -193,9 +193,67 @@ fn build_asts_aligner(short_insert: bool) -> Aligner{
 
 }
 
+
+pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usize>, r_end: Option<usize>) -> (String, String) {
+
+    let mut ref_aligned_seq = String::new();
+    let mut query_aligned_seq = String::new();
+
+    let query_seq = record.seq().as_bytes();
+    let mut rpos_cursor = None;
+    for [qpos, rpos] in record.aligned_pairs_full() {
+        if rpos.is_some() {
+            rpos_cursor = rpos;
+        }
+
+
+        if let Some(r_start) = r_start {
+            if let Some(rpos_cursor) = rpos_cursor {
+                if (rpos_cursor as usize) < r_start {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        }
+
+
+
+        let q_char = if let Some(qpos_) = qpos {
+            unsafe {(*query_seq.get_unchecked(qpos_ as usize)) as char}
+        } else {
+            '-'
+        };
+
+        let r_char = if let Some(rpos_) = rpos{
+            unsafe {(*ref_seq.get_unchecked(rpos_ as usize)) as char}
+
+        } else {
+            '-'
+        };
+
+        ref_aligned_seq.push(r_char);
+        query_aligned_seq.push(q_char);
+
+        
+        if let Some(r_end) = r_end {
+            if let Some(rpos_cursor) = rpos_cursor {
+                if (rpos_cursor as usize) >= (r_end - 1) {
+                    break;
+                }
+            }
+        }
+
+    }
+
+    (ref_aligned_seq, query_aligned_seq)
+
+}
+
 #[cfg(test)]
 mod tests {
-    use gskits::fastx_reader::fasta_reader::FastaFileReader;
+    use gskits::{fastx_reader::fasta_reader::FastaFileReader, gsbam::bam_record_ext::{BamReader, BamRecordExt}};
+    use mm2::build_bam_record_from_mapping;
 
     use super::*;
 
@@ -363,11 +421,45 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
         for hit in aligner.map(q_seq.as_bytes(), false, false, None, None).unwrap(){
             println!("{:?}", hit);
         }
+    }
 
-        
-    
-    
+    #[test]
+    fn test_align_two_seq() {
+        let icing_reads = "CCGCGCCAATTATTGTCGATGGCGACGGCGCATTGCCCGTCAGGATTACCTTGTGGATCAATCATTTCCACCATCAGCAATTTGTCATGCGCCAGTCCGTGATGGCGTACGGTACAAACAATTTGTCCAGTGACGACTGCCAGTTTCATACCCGCCTCCGTGGCGTATTTCAGGTAAAAGCTCCCCCTACCCTCCGCAGAAGGTAAAATGAAAAAGGAGAGAGCGTGACGCCCGAATCGACGTCACACAGGGTGATTACAGGTTGCTGCTATCGCCTTTCAGGCCGATCGGGAAGACTTCTTCCAGGTCGCCGTGCGGACGCGGGATAACGTGTACAGATACCAGCTCGCCGATACGCTGTGCCGCTGCGGCACCTGCATCGGTCGCGGCTTTACAGGCTGCAACATCACCACGAACCATGGCAGTACACAGGCCGCCGCCAATCTGCTTAACACCAACCAGCTTGACGCGCGCAGCTTTCACCATCGCGTCAGAAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGCTTTCCTCTTTATCAGGGTCCAGAACGGGACCGTTCATTCAACCAGTGTTTGTAACTGCTTTCGCGGTTCACTTCTGTCTGACGCGGCACAGCTGCCACCAGCGCCAGCTCGATAATTTCCTGCACGCTACAACCACGAGAGAGATCGTGCATCGGCGCGGCAAGTCCTTGTATCAGTGGCCCGACGGCACGATATCCGCCGAGTCGTTGTGCGATTTTGTAACCAATATTTCCGGCTTCCAGCGACGGAAAAACCATCACATTGGCCTTGCCCTGTAGCGGGCTGGCAGGCGCTTTTTGCGCCGCCACTTCCGGCACGAAGGCGGCGTCAAACTGTAACTCGCCATCCACCACCAGCTTTGGTGCGCGCTCACGGACGATTTCTGTCGCCTGCTGGACGTTAGCAACACAGGGGTGACGGGCGCTACCATTGCTGGAAAACGACAGCATCGCCACGCGCGGCTCTTCTCCGGTGATGGCGCGCCAGGTTTCGGCACTGGCAA";
+        let sbr = "CCGCGCCATATTTTTTGATAATAACTTGGTATTGGACTTTTTGATTGTCGGATGGCGACGGCGCATTGCCGTCAGGATTACCTTGTGATCAATCATTCCACCATAACAAATTTGTCATGCGCCAGTCCGTGATGGCGTAACGTTGTATTGTCCCGTGACGACTGCCAAGTTTCAACCCGCTCCGTGGCGTATTTCAGGTAAAAGCATTCCCCCTA
+CCCTCCGCAGAAGGTAATAAAATGAAAAAGGAGAGAGACGTGACAGCCCGGAATCGCCCTGTCACATCTGGGTGATTAACAGGTTGCTGCTATTCGCCTTTCAAAGGGCCGATCGAGGAACACCTTTCTCCAGTCCGTGGACGCGTGGATACGTGTACAGATACCAGCTCGCCGATACGCTGTGCCGTGACGCACCTGCATCGGTCGCGGCTTTACAGCAACATCACCACGAACCATGCGTACACAGCCGCCGCATCTGCTAAAACCCATAACCACCAGCTTGACGCGCGCAGCTTTCCATCGCGTCCAGA
+AAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGTTTCCTCTTATATCAGGTCCAGAACGGACCGTTCATTCACAACCGTGTTTGTAAACGGCTTTCGCGGTCACTTCCTGTCTGACGCGGCACGCTGGCCACCAGCGCCAGCTCGATTATTTCTTGCACGCTACAACCACGAGAGAGAGAGATCGTGCATCGGCCGGCAAGTCCCTTGTATCAGTGGCCGACGGCACGATATCCGCCGGTCGTTGTGCGATTTTTAACCATATTTCCGGGCTTCCAGCGACAGGA
+AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCACAACTGTAACTCGCCTCCACACCAGCTTTGGTGCAGCGCTCACGGACTGATTTCTGGCCGCTGCTGGACGTTAGCAACAACCGGGGTGACGGGCGCTACCATTGCTGGAAAACGACACGCCACGCGTCGGCTCTTCCCGGTGATGGCGCGCCAGGTTTCGGCACTCAGCAAA";
+        let mut aligner = build_asts_aligner(false);
+        aligner = aligner.with_seq_and_id(icing_reads.as_bytes(), b"icing").unwrap();
+        let mut target_idx = HashMap::new();
+        target_idx.insert("icing".to_string(), (0, icing_reads.len()));
+        for hit in aligner.map(sbr.as_bytes(), false, false, None, None).unwrap() {
+            if hit.is_primary {
+                let query_record = ReadInfo::new_fa_record("name".to_string(), sbr.to_string());
+                let record = build_bam_record_from_mapping(&hit, &query_record, &target_idx);
+
+                let (ref_aligned, query_aligned) = draw_aligned_seq(&record, icing_reads.as_bytes(), Some(590), Some(620));
+                println!("\n{}\n{}", ref_aligned, query_aligned)
+
+            }
+
+        }
+
+
+        // let mut reader = BamReader::from_path("/data/ccs_data/ccs_eval2024q4/icing040/sbr-with-ref-smc2icing.bam").unwrap();
+        // reader.set_threads(40).unwrap();
+        // for record in reader.records() {
+        //     let record = record.unwrap();
+        //     let record_ext = BamRecordExt::new(&record);
+        //     if record_ext.get_qname().eq("read_99766/99766/subread/0") {
+        //         let (ref_aligned, query_aligned) = draw_aligned_seq(&record, icing_reads.as_bytes(), Some(590), Some(620));
+        //         println!("\n{}\n{}", ref_aligned, query_aligned);
+        //     }
+        // }
 
     }
 
 }
+
+// AAAAAAAAAACCCGGGGGTTTTGAGAGAGACCGCCGCAATATTTATTTATTAAAATTTATTTTATTAATAAATTTGTATTATTTTTGGGGTCGTCCGTGGCACGGCGCAATTGCCCGTCAGGATTATCTTGTGGATCGAATCATTTCCACCATCAGCTAATTTGTCATGCGCCAAGTCCGTGGATGCGTACGGTACAAAACAATTTGTCCAGTGACACTGCCAGTTTCATACCCCCTCCGTGGCGTAATTTCAGTAAAAGCTCCCCCTACCCTCCGCAAGAAGGTAAAATGAAAAGGAGGAGCGTGACGCCCCGAATCGAAGTCACACAGGGTGATTACAGGGTTGCTGCTATCGCCTTTCAGGGCCGATCGGTTGAAGACTTCTTCAGGTCGCCGTGCGGACGCGGGATACGTGTACAGATACTCGCCGATACGCTGTGCCGACTGCGCACCTGCCACGGTCCGCGGCTTTACAGGCTGCAACATCACCACGAAACCTGGCAGTACACAAGGCCGCCGCCAATCTGCTTAACACCAACCAACTTGACGCGCGCAGCTTTCCACCCATCGCGTCAGAGCCTCAAATCAGTGCAAACCAGGCCCCGGGTTTCAGGATCATTCCAATGCTTTCCATTGTGCTTCCTCTTTATCAGGGTCTAGAACGGGACCGTTCATTCAACCAGTGTTTTTGTAACTGCTTTTCGCGGTTCACTCTGTCTCACCGCGGCACAGCGCCAAACCAGGCGCCAGCTCGTAATTTTCCTGCACGCTACAAACCACGAGAGAGATCGTGCAATCGCGCGGCAAGTCCTTGTATCAGTGGCCCGGTGCCCGACGGCAACGAATATCCGCCGAGTCCGTTGTGCGATTTTGTAACCACATATTTTCCGCTTCCAGCGACGGAAAAACCGATCTTGGCCTTGCCCCCTGTAGCGGCGCAAGGCGCTTTTTGCTGCCGCACTTCCGGCACGAAGGCTGAGCGTCAAAACTGTAACTCGCCATCCACACCAAGCTTTGGTGCGCTGCTCACGGACGATTCTGTCCGCCTGCTGATGACGTTAGCAACACAGGGGTGACGGGCGCTCCATTGCTGGAAAACGACAGCTCGCCACGCGCGCCTCTTCTCCGGTGATGGCTGCGCCAGTTTTCGGCACTGGCAA
