@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
-use minimap2::Aligner;
+use minimap2::{Aligner, PresetSet};
 use mm2::params::InputFilterParams;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 
@@ -117,9 +117,9 @@ pub fn align(
     subreads_and_smc: &SubreadsAndSmc,
     target_idx: &HashMap<String, (usize, usize)>,
 ) -> Vec<Option<BamRecord>> {
-    let mut aligner = build_asts_aligner(subreads_and_smc.smc.seq.len() < 200);
+    let aligner = build_asts_aligner(subreads_and_smc.smc.seq.len() < 200);
 
-    aligner = aligner
+    let aligner = aligner
         .with_seq_and_id(
             subreads_and_smc.smc.seq.as_bytes(),
             subreads_and_smc.smc.name.as_bytes(),
@@ -137,6 +137,7 @@ pub fn align(
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
+                Some(subread.name.as_bytes())
             )
             .unwrap();
         let mut bam_record = None;
@@ -156,7 +157,7 @@ pub fn align(
 
 /// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
 /// https://github.com/lh3/minimap2/blob/master/minimap.h
-fn build_asts_aligner(short_insert: bool) -> Aligner {
+fn build_asts_aligner(short_insert: bool) -> Aligner<PresetSet> {
     let mut aligner = Aligner::builder()
         .map_ont()
         .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
@@ -294,7 +295,7 @@ mod tests {
         aligner.idxopt.k = 7;
         aligner.idxopt.w = 5;
 
-        aligner = aligner
+        let aligner = aligner
             .with_seq_and_id(ref_fa.seq.as_bytes(), ref_fa.name.as_bytes())
             // .with_seq(subreads_and_smc.smc.seq.as_bytes())
             .unwrap();
@@ -306,6 +307,7 @@ mod tests {
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
+                Some(query_fa.name.as_bytes())
             )
             .unwrap();
 
@@ -322,7 +324,7 @@ mod tests {
         aligner.idxopt.k = 7;
         aligner.idxopt.w = 5;
 
-        aligner = aligner
+        let aligner = aligner
             .with_seq_and_id(query_fa.seq.as_bytes(), query_fa.name.as_bytes())
             // .with_seq(subreads_and_smc.smc.seq.as_bytes())
             .unwrap();
@@ -334,6 +336,7 @@ mod tests {
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
+                Some(ref_fa.name.as_bytes())
             )
             .unwrap();
 
@@ -355,17 +358,17 @@ mod tests {
 
     #[test]
     fn test_short_insert() {
-        let mut aligner = build_asts_aligner(true);
+        let aligner = build_asts_aligner(true);
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
         println!("\n\n\n");
 
         let ref_seq = "CCCCTTTTAAAAGGGGGAGAGA";
         let q_seq = "CCCCTTTTAAAAGGGGGAGAGA";
-        aligner = aligner.with_seq(ref_seq.as_bytes()).unwrap();
+        let aligner = aligner.with_seq(ref_seq.as_bytes()).unwrap();
 
         for hit in aligner
-            .map(q_seq.as_bytes(), false, false, None, None)
+            .map(q_seq.as_bytes(), false, false, None, None, Some(b"query"))
             .unwrap()
         {
             println!("{:?}", hit);
@@ -379,11 +382,11 @@ mod tests {
 CCCTCCGCAGAAGGTAATAAAATGAAAAAGGAGAGAGACGTGACAGCCCGGAATCGCCCTGTCACATCTGGGTGATTAACAGGTTGCTGCTATTCGCCTTTCAAAGGGCCGATCGAGGAACACCTTTCTCCAGTCCGTGGACGCGTGGATACGTGTACAGATACCAGCTCGCCGATACGCTGTGCCGTGACGCACCTGCATCGGTCGCGGCTTTACAGCAACATCACCACGAACCATGCGTACACAGCCGCCGCATCTGCTAAAACCCATAACCACCAGCTTGACGCGCGCAGCTTTCCATCGCGTCCAGA
 AAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGTTTCCTCTTATATCAGGTCCAGAACGGACCGTTCATTCACAACCGTGTTTGTAAACGGCTTTCGCGGTCACTTCCTGTCTGACGCGGCACGCTGGCCACCAGCGCCAGCTCGATTATTTCTTGCACGCTACAACCACGAGAGAGAGAGATCGTGCATCGGCCGGCAAGTCCCTTGTATCAGTGGCCGACGGCACGATATCCGCCGGTCGTTGTGCGATTTTTAACCATATTTCCGGGCTTCCAGCGACAGGA
 AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCACAACTGTAACTCGCCTCCACACCAGCTTTGGTGCAGCGCTCACGGACTGATTTCTGGCCGCTGCTGGACGTTAGCAACAACCGGGGTGACGGGCGCTACCATTGCTGGAAAACGACACGCCACGCGTCGGCTCTTCCCGGTGATGGCGCGCCAGGTTTCGGCACTCAGCAAA";
-        let mut aligner = build_asts_aligner(false);
-        aligner = aligner.with_seq_and_id(icing_reads.as_bytes(), b"icing").unwrap();
+        let aligner = build_asts_aligner(false);
+        let aligner = aligner.with_seq_and_id(icing_reads.as_bytes(), b"icing").unwrap();
         let mut target_idx = HashMap::new();
         target_idx.insert("icing".to_string(), (0, icing_reads.len()));
-        for hit in aligner.map(sbr.as_bytes(), false, false, None, None).unwrap() {
+        for hit in aligner.map(sbr.as_bytes(), false, false, None, None, Some(b"sbr")).unwrap() {
             if hit.is_primary {
                 let query_record = ReadInfo::new_fa_record("name".to_string(), sbr.to_string());
                 let record = build_bam_record_from_mapping(&hit, &query_record, &target_idx);
