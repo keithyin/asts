@@ -36,7 +36,6 @@ pub fn subreads_and_smc_generator(
     sorted_smc_bam: &str,
     input_filter_params: &InputFilterParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
-    
 ) {
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
     smc_bam_reader.set_threads(5).unwrap();
@@ -47,7 +46,7 @@ pub fn subreads_and_smc_generator(
     let mut subreads_records = subreads_bam_reader.records();
 
     let mut smc_record_opt = smc_records.next();
-    let mut sbr_record_opt  = subreads_records.next();
+    let mut sbr_record_opt = subreads_records.next();
 
     loop {
         if smc_record_opt.is_none() {
@@ -90,7 +89,7 @@ pub fn subreads_and_smc_generator(
         sender.send(subreads_and_smc).unwrap();
         if sbr_record_opt.is_none() {
             break;
-        }        
+        }
         smc_record_opt = smc_records.next();
     }
 }
@@ -101,7 +100,6 @@ pub fn align_worker(
     target_idx: &HashMap<String, (usize, usize)>,
 ) {
     for subreads_and_smc in recv {
-
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let align_infos = align(&subreads_and_smc, target_idx);
         let align_res = mm2::AlignResult {
@@ -119,7 +117,6 @@ pub fn align(
     subreads_and_smc: &SubreadsAndSmc,
     target_idx: &HashMap<String, (usize, usize)>,
 ) -> Vec<Option<BamRecord>> {
-
     let mut aligner = build_asts_aligner(subreads_and_smc.smc.seq.len() < 200);
 
     aligner = aligner
@@ -157,10 +154,9 @@ pub fn align(
     bam_records
 }
 
-
 /// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
 /// https://github.com/lh3/minimap2/blob/master/minimap.h
-fn build_asts_aligner(short_insert: bool) -> Aligner{
+fn build_asts_aligner(short_insert: bool) -> Aligner {
     let mut aligner = Aligner::builder()
         .map_ont()
         .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
@@ -175,10 +171,9 @@ fn build_asts_aligner(short_insert: bool) -> Aligner{
     // aligner.mapopt.zdrop_inv = 200;
     // aligner.mapopt.bw = 500;
     // aligner.mapopt.end_bonus = 0;
-    
+
     aligner.mapopt.best_n = 1;
     aligner.mapopt.q_occ_frac = 0.0;
-
 
     if short_insert {
         aligner.idxopt.k = 4;
@@ -190,7 +185,6 @@ fn build_asts_aligner(short_insert: bool) -> Aligner{
     }
 
     aligner
-
 }
 
 #[cfg(test)]
@@ -199,58 +193,28 @@ mod tests {
 
     use super::*;
 
-
     #[test]
     fn test_align() {
-        let subreads_and_smc = SubreadsAndSmc{
-            smc: ReadInfo::new_fa_record("hello".to_string(), "CACTCTTTAAAAGGGGGAGAGAGATCTCAGGATGATTCAAAGATTGAAGAAGTTAAGAAAAAACGGGGATAAGGCATGAAAGATTGCGAGAATTGTTG
-ATGTAGAGAAGGTTGAG
-AAAAAGTTTCTCGGCAAGCCTATTACCGTGTGGAAACTTATTGGAACATCCCCAAGATGTTCCCACTATTAGAGAAAAAAGTTAGAGAACATCCAGCAGTGTGGACATCTTCGAATACGATATTCCATTTGCAAAGAGATACCTCATCGACAAAGGCCTAATACCAATGGA
-GGGGGAAGAAGAGCTAAAGATTCTTGCCTTCGATATAGAAACCCTCTATCACGAAGGAGAAGAGTTTGGAAAGGCCCAATTATAATGATTAGTTATGCAGATGAGAATGAAGCAAAGGTGATTACTTGGAAAAACATAGATCTTCCATACGTTGAGGTGTATCAAGCGAGA
-GAGAGATGATAAAGAGATTTCTCAGGATTATCAGGGAGAGGATCCTGACATTATATGTTACTTATAATGGAGACTCATTCGACTTCCATATTTAGCGAAAAGGGCAGAAAAACTTGGGGATTAAATTAACCATTGGAAGAGATGGAAGCGAGCCCAAGATGCAGAGAATAG
-GCGATATGACGGCTGTAGAAGTCAAGGAAGAATACATTTCGACTGTATCATGTAATAACAAGGACATAAATCTCCCAACATACACACTAGAGGCTGTATATGAAGCAATTTTTGGAAAGCCAAAGGAGAAGGTATACGCCGACGAGATAGCAAAAGCCTGGGAAAGTGGAG
-AGAACCTTGAGAGAGTTGCCAAATACTCGATGGAAGATGCAAAGGCAACTTATGAACTCGGGAAAGAATTCCTTCCAATGGAAATTCAGCTTTCAAGATTAGTTGGACAACCTTTATGGGATGTTTCAAGGTCAAGCACAGGGAAGACCTGTAGAGTGGTTCTTACTTAGG
-AAGCCTACGAAAGAAACGAAGTAGCATCTCTCTCCCCCTTTTAAAAGGG".to_string()),
+        let subreads_and_smc = SubreadsAndSmc {
+            smc: ReadInfo::new_fa_record(
+                "hello".to_string(),
+                "CACTCTTTAAAAGGGGGGTTGAGG".to_string(),
+            ),
             subreads: vec![
-                ReadInfo::new_fa_record("".to_string(), "AAAAACCCTTTTAAAAGGGGGAGAGAGATTCAGGATGATTCAAAGATTGAAGAAGTTACCAGAAAATAACGGGATAAAGGCATGAAAGATTGCGAGAATGTTGATGTAGAGAAGGTTGA
-GAAAAAGTTTCTCGGCAAGCCTATTACCGTGTGTGAAACTTTATTTGGAACTCCCCAAGATGTTCCCACTATTAGAGAAAAAGTTAGAGAACACCAAGCACAGTTTGTGGACATCTTACCCGATACATATTCCATTTGCAAGAGATACCTCATCACAAAGGCCTAATACCA
-ATGAGGGCGGAAGAAGAGAAAGATTCTTGCCTTCGTAAGAAACCCTCTATCACGAGGAGAAGAGTTTGGAAAAGGCCCAATTATAATGATTAGTTTATCCAGATGATGAATGAAGCAAAGGTGATTACATTGGGAAAAACATAGACTCCATAACGTTGAGGTGTATCAAGC
-GAGAGAGAGATGATAAAGAGATTTCTCAGGATTATCAGGGAGAGGATCCGACATTATAGTTACTTATAATGAGACTCATTCGACTTCCATATTTAAGCGAAAGGGCAGAAAAACTTTGGGATAAATTAACCATTGGAAGGATGGAGCGAGCCAAAGATCCAGAGAATAGGG
-ATATGACGGCGTAGAAGTCAGGGAAGAAAACTCACTGTATCATGTAATAACAAGGACAATAAATCTCCCAACATACACACTAGGGCTGTATATGAAGCAATTTTTGGAAAGCAAAGGAGGAAGGTATACGCCGACGAGATAGCAAAAGCCTGGAAAGTGGAGAAATTGAGA
-GAGTTGCCAAATACTCGATGGAAGATGCAAAAGGCAACTTAGAACTCGGGAAGAATTCCTTCCAATGGAAATTCAGCTTTCAGGGATTAGTGGACACCTTTTATGGGATGTTCAGGTCAAGCACAGGGACCTGTAGAGTGGTTCTTACTTAGGAAGCACGAAAGAAACGAA
-GTAGCATCCTCTCCCCCTTTTAAAAGGG".to_string()),
-            
-                ReadInfo::new_fa_record("".to_string(), "ACCCTTTTAAAAGGGGGAGAGAGATGCACGTTCTTTCGTAGGCTTCCTAAGTAAGAACCATCACAGGTTTCCCTGTGCTTTGACCTTGAAACTCCCCATAAGGTTGTCCAACATCTTGG
-CTGTAATTTTTCCATTGGAAGGAATTCTTTCC
-GAGTACATAAGTTGCCTTTGCATCTTCCATCGAGTATTTGGCAACTCTCTCAAGGTTCTCCCTCCACTTTCCCAGGCTTTTCCTATCTCGTCGGCGTATACCTTCTCCTTTGGCTTTCAAAATTGCTTCATATAAAGAGCCTCTAGTGTGTATGTTGGGAGATTAGTCCTT
-GTTTATTACATGATACGAAAGTCGAAATGTATTTCTTCCTGACTTCTACAGCCGTCATATCGCCTATTCTCTGCAT
-CTTGGGCTCGCTTCCATCTCTCCAATGGTTAATTTAATCCCCAAGTTTTTCTGCCCTTTTCGGCTAAATAGGAAGTGAATGAGTCTCCCCCCCCCAAATTATAAGTAACATATAATGTCAGAATCCTTCTCCCTGATAATCCTGAGAAATCTCGTTTATCATCTCTTCTCG
-CTTGATACAACCTCAACGTAGGAAGATCTAATGTTTTTCCAAGTAATCACCTTTTGCTTCATTTTCATCTCATACT
-AATCAATTATAATTGGGCCTTCCAAACTCTTCTCCTTCCGTGATAGAGGGTTCATATCGAAGCAAGAATCTTTAGCTCTTCTTCCCCCTCCATGGTAATTTAGGGCCTTTGTCGAATGAGGTATCTCTTTGCCTCTTGCAAATGGAATATTCGTATATCAAGATGGTCCAC
-ACTGCTGGATGTTCTCTAACTTTTTTCTCTAATAGTGGGAACATCTTGGGGATGTTTCCAATAAGTTTTCCACACG
-TAATAGGCTTGCCGAGAAATTTTTCCAACCTTCTCTAACATCAACAATCTCGCAATCTTTCAATGCCTTTCCCCCGTTTTTTCTTAACTTTCTTCAATCTTTGAATCCCCTGAGACTCCTTCCCCCTTTTAAAGAGGGG".to_string()),
-                ReadInfo::new_fa_record("".to_string(), "CCCCCTTTAAAAGGGGGAGAGAGATCTCAGGATGATTCAAAGATTGAAGAAGTTAAGAAAAACGGGGAAGGCATGAAGATTGCGAGGAATTGTTGATGGTAGAGAAGGT
-TGAGAAAAGTTTCTCGGCAAGCTATTACCCGTGTAGAACTTA
-TTGGAACATCCCCAAGATGTTCCCACTATTAGAAAAAAGTTAGAGAACATCCAGCAGTGTGGACATCTTCGAATACGATATTCCATTTGCAAAGAGATACCTCATCGAGACAAACCTAATACCAATGGAGGGGAAGAAGAGCTAAAGATCTGCCTCGATATAGAAAC
-CCTCTATCACGAAGGAGAAGATTTGGAAAGGCCCAATTATAATGATTAGTTATGCAGAGAGAATGAAGCAAAGGTGATTA
-CTTGGAAAACATAAGATCTTCCATACGTTGAGATGTATCAAGCGAGAGAGAGTGTGATCAAGAGATTCTCAGGATTATCAGGGAGAGGATCCTGACATTAATAATAGTTACTTATAATGGAGAACTCATTCGACTTCCCCATATTTAGCGAAAGGGGCAGAAAAACT
-TGGGATTAATTTAACCATTGGAAGAATGGAAGCGAGCCAGATGCAGAGAAAGCATATGACAGGCTGTAGAAGTCAAGGAA
-GAATACATTTCGACTGTATCATGTAATAACAGGACTAAATCTCCACATACAACTTAAGAGGCTGTAGCATTTTTGGAAAGCCAAGGAGAGGTATACGCCGACGAAGAATAGCAACAAGCCTGGGAAGTGGAGAAACCTTGAGAGAGGTTGCCAAATACTCGATGGAA
-GATGCATTGGCACTTATGAACTCGGGAAAGAATTCCTCCATGGAAATTCAGCTTTCAAGATAGTTGGACAACCTTTATGG
-GATGTTTCCAAGGCAAGCACAGGGAACCTGTAGAGTGGTTCTTACTTAGGAAAGCCACGAAAGAAACGAAGTAGCATGCTCTCTCCCCTTTTAAACAGGGAAACC".to_string()),
-                ReadInfo::new_fa_record("".to_string(), "CCCCTTTTAAAAGGGGGAGAGAGATGCTACTTCGTTTCTTTCGTAGGCTTTCTAAGTAAAACCACTCTAACAGGTTCCACCCGTTCCCTGTGCTTGACCTTGAAACACCA
-TAAAAAGGTTGGTCCAACTAATCTTTGAAAAGCTGAAATTCCATATGGAAGGATTCTTTCCCGAGTACATAAGTGCCCTTTGCATCTTCCACGAGTATTTGGCAACTCTCTCAAGGTTCCTCTCCACTTTCCCAGGCTTTTCTATCTCGTCGCGTAATACCTTTCTC
-CTTTGGCTTTTCCGAAAAAATTGCTTCAATACAGCCCTAGGTGTGTAGTTGGGAGATTTATTGTCCTTGTTATACATGATACAAGTCAGAAATGTAATTCTCCCTTGACTCTACAGCGGTCATATCGCCTATCTCTGCATCTTGGGCTCCCGCTTCCATCTCTTCCA
-ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
-]
-    };
+                ReadInfo::new_fa_record("".to_string(), "CACTCTTTAAAAGGGGGGGGTTGAGG".to_string()),
+                ReadInfo::new_fa_record("".to_string(), "CACTATTTAAAAGGGGGGTTGAGG".to_string()),
+                ReadInfo::new_fa_record("".to_string(), "CACTCTTTAAAAGGGGGGTTGAGA".to_string()),
+                ReadInfo::new_fa_record("".to_string(), "CACTCTTTAAAAGGGGGGAAGAGG".to_string()),
+            ],
+        };
 
-    let mut target2idx = HashMap::new();
-    target2idx.insert("hello".to_string(), (0, subreads_and_smc.smc.seq.len()));
-    align(&subreads_and_smc, &target2idx);
-
+        let mut target2idx = HashMap::new();
+        target2idx.insert("hello".to_string(), (0, subreads_and_smc.smc.seq.len()));
+        let records = align(&subreads_and_smc, &target2idx);
+        for record in records {
+            println!("{:?}", record.unwrap().cigar());
+        }
     }
-
 
     #[test]
     fn test_align2() {
@@ -262,25 +226,19 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
         let ref_fa = gskits::fastx_reader::read_fastx(ref_fa);
         let ref_fa = &ref_fa[0];
 
-
-
         let mut aligner = minimap2::Aligner::builder()
-        .map_ont()
-        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-        .with_sam_out()
-        .with_index_threads(1);
+            .map_ont()
+            .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
+            .with_sam_out()
+            .with_index_threads(1);
 
         aligner.idxopt.k = 7;
         aligner.idxopt.w = 5;
 
         aligner = aligner
-            .with_seq_and_id(
-                ref_fa.seq.as_bytes(),
-                ref_fa.name.as_bytes(),
-            )
+            .with_seq_and_id(ref_fa.seq.as_bytes(), ref_fa.name.as_bytes())
             // .with_seq(subreads_and_smc.smc.seq.as_bytes())
             .unwrap();
-
 
         let hits = aligner
             .map(
@@ -296,7 +254,6 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
             println!("query2ref {:?}", hit)
         }
 
-
         let mut aligner = minimap2::Aligner::builder()
             .map_ont()
             .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
@@ -307,13 +264,9 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
         aligner.idxopt.w = 5;
 
         aligner = aligner
-            .with_seq_and_id(
-                query_fa.seq.as_bytes(),
-                query_fa.name.as_bytes(),
-            )
+            .with_seq_and_id(query_fa.seq.as_bytes(), query_fa.name.as_bytes())
             // .with_seq(subreads_and_smc.smc.seq.as_bytes())
             .unwrap();
-
 
         let hits = aligner
             .map(
@@ -328,29 +281,21 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
         for hit in hits {
             println!("ref2query {:?}", hit)
         }
-
-
     }
-
 
     #[test]
     fn test_build_aligner() {
-
         let aligner = build_asts_aligner(true);
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
 
-
         let aligner = build_asts_aligner(false);
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
-
-
     }
 
     #[test]
     fn test_short_insert() {
-
         let mut aligner = build_asts_aligner(true);
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
@@ -360,14 +305,11 @@ ATGGTTAATTTAAATCCCCAATTTTCTGCCCTTTTTCGCTAAAATATGGGAGTCGAATGAGTCTA".to_string())
         let q_seq = "CCCCTTTTAAAAGGGGGAGAGA";
         aligner = aligner.with_seq(ref_seq.as_bytes()).unwrap();
 
-        for hit in aligner.map(q_seq.as_bytes(), false, false, None, None).unwrap(){
+        for hit in aligner
+            .map(q_seq.as_bytes(), false, false, None, None)
+            .unwrap()
+        {
             println!("{:?}", hit);
         }
-
-        
-    
-    
-
     }
-
 }
