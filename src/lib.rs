@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
 use minimap2::{Aligner, PresetSet};
-use mm2::params::InputFilterParams;
+use mm2::params::{InputFilterParams, TOverrideAlignerParam};
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
@@ -98,10 +98,19 @@ pub fn align_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<mm2::AlignResult>,
     target_idx: &HashMap<String, (usize, usize)>,
+    index_params: &mm2::params::IndexParams,
+    map_params: &mm2::params::MapParams,
+    align_params: &mm2::params::AlignParams,
 ) {
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
-        let align_infos = align(&subreads_and_smc, target_idx);
+        let align_infos = align(
+            &subreads_and_smc,
+            target_idx,
+            index_params,
+            map_params,
+            align_params,
+        );
         let align_res = mm2::AlignResult {
             records: align_infos
                 .into_iter()
@@ -116,8 +125,16 @@ pub fn align_worker(
 pub fn align(
     subreads_and_smc: &SubreadsAndSmc,
     target_idx: &HashMap<String, (usize, usize)>,
+    index_params: &mm2::params::IndexParams,
+    map_params: &mm2::params::MapParams,
+    align_params: &mm2::params::AlignParams,
 ) -> Vec<Option<BamRecord>> {
-    let aligner = build_asts_aligner(subreads_and_smc.smc.seq.len() < 200);
+    let aligner = build_asts_aligner(
+        subreads_and_smc.smc.seq.len() < 200,
+        index_params,
+        map_params,
+        align_params,
+    );
 
     let aligner = aligner
         .with_seq_and_id(
@@ -137,7 +154,7 @@ pub fn align(
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
-                Some(subread.name.as_bytes())
+                Some(subread.name.as_bytes()),
             )
             .unwrap();
         let mut bam_record = None;
@@ -157,7 +174,12 @@ pub fn align(
 
 /// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
 /// https://github.com/lh3/minimap2/blob/master/minimap.h
-fn build_asts_aligner(short_insert: bool) -> Aligner<PresetSet> {
+fn build_asts_aligner(
+    short_insert: bool,
+    index_params: &mm2::params::IndexParams,
+    map_params: &mm2::params::MapParams,
+    align_params: &mm2::params::AlignParams,
+) -> Aligner<PresetSet> {
     let mut aligner = Aligner::builder()
         .map_ont()
         .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
@@ -185,13 +207,19 @@ fn build_asts_aligner(short_insert: bool) -> Aligner<PresetSet> {
         aligner.mapopt.min_ksw_len = 0;
     }
 
-    aligner
+    index_params.modify_aligner(&mut aligner);
+    map_params.modify_aligner(&mut aligner);
+    align_params.modify_aligner(&mut aligner);
 
+    aligner
 }
 
-
-pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usize>, r_end: Option<usize>) -> (String, String) {
-
+pub fn draw_aligned_seq(
+    record: &BamRecord,
+    ref_seq: &[u8],
+    r_start: Option<usize>,
+    r_end: Option<usize>,
+) -> (String, String) {
     let mut ref_aligned_seq = String::new();
     let mut query_aligned_seq = String::new();
 
@@ -201,7 +229,6 @@ pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usiz
         if rpos.is_some() {
             rpos_cursor = rpos;
         }
-
 
         if let Some(r_start) = r_start {
             if let Some(rpos_cursor) = rpos_cursor {
@@ -213,17 +240,14 @@ pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usiz
             }
         }
 
-
-
         let q_char = if let Some(qpos_) = qpos {
-            unsafe {(*query_seq.get_unchecked(qpos_ as usize)) as char}
+            unsafe { (*query_seq.get_unchecked(qpos_ as usize)) as char }
         } else {
             '-'
         };
 
-        let r_char = if let Some(rpos_) = rpos{
-            unsafe {(*ref_seq.get_unchecked(rpos_ as usize)) as char}
-
+        let r_char = if let Some(rpos_) = rpos {
+            unsafe { (*ref_seq.get_unchecked(rpos_ as usize)) as char }
         } else {
             '-'
         };
@@ -231,7 +255,6 @@ pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usiz
         ref_aligned_seq.push(r_char);
         query_aligned_seq.push(q_char);
 
-        
         if let Some(r_end) = r_end {
             if let Some(rpos_cursor) = rpos_cursor {
                 if (rpos_cursor as usize) >= (r_end - 1) {
@@ -239,16 +262,17 @@ pub fn draw_aligned_seq(record: &BamRecord, ref_seq: &[u8], r_start: Option<usiz
                 }
             }
         }
-
     }
 
     (ref_aligned_seq, query_aligned_seq)
-
 }
 
 #[cfg(test)]
 mod tests {
-    use gskits::{fastx_reader::fasta_reader::FastaFileReader, gsbam::bam_record_ext::{BamReader, BamRecordExt}};
+    use gskits::{
+        fastx_reader::fasta_reader::FastaFileReader,
+        gsbam::bam_record_ext::{BamReader, BamRecordExt},
+    };
     use mm2::build_bam_record_from_mapping;
 
     use super::*;
@@ -270,7 +294,13 @@ mod tests {
 
         let mut target2idx = HashMap::new();
         target2idx.insert("hello".to_string(), (0, subreads_and_smc.smc.seq.len()));
-        let records = align(&subreads_and_smc, &target2idx);
+        let records = align(
+            &subreads_and_smc,
+            &target2idx,
+            &mm2::params::IndexParams::default(),
+            &mm2::params::MapParams::default(),
+            &mm2::params::AlignParams::default(),
+        );
         for record in records {
             println!("{:?}", record.unwrap().cigar());
         }
@@ -307,7 +337,7 @@ mod tests {
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
-                Some(query_fa.name.as_bytes())
+                Some(query_fa.name.as_bytes()),
             )
             .unwrap();
 
@@ -336,7 +366,7 @@ mod tests {
                 true,
                 None,
                 Some(&[0x4000000, 0x40000000]),
-                Some(ref_fa.name.as_bytes())
+                Some(ref_fa.name.as_bytes()),
             )
             .unwrap();
 
@@ -347,18 +377,33 @@ mod tests {
 
     #[test]
     fn test_build_aligner() {
-        let aligner = build_asts_aligner(true);
+        let aligner = build_asts_aligner(
+            true,
+            &mm2::params::IndexParams::default(),
+            &mm2::params::MapParams::default(),
+            &mm2::params::AlignParams::default(),
+        );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
 
-        let aligner = build_asts_aligner(false);
+        let aligner = build_asts_aligner(
+            false,
+            &mm2::params::IndexParams::default(),
+            &mm2::params::MapParams::default(),
+            &mm2::params::AlignParams::default(),
+        );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
     }
 
     #[test]
     fn test_short_insert() {
-        let aligner = build_asts_aligner(true);
+        let aligner = build_asts_aligner(
+            true,
+            &mm2::params::IndexParams::default(),
+            &mm2::params::MapParams::default(),
+            &mm2::params::AlignParams::default(),
+        );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
         println!("\n\n\n");
@@ -382,23 +427,29 @@ mod tests {
 CCCTCCGCAGAAGGTAATAAAATGAAAAAGGAGAGAGACGTGACAGCCCGGAATCGCCCTGTCACATCTGGGTGATTAACAGGTTGCTGCTATTCGCCTTTCAAAGGGCCGATCGAGGAACACCTTTCTCCAGTCCGTGGACGCGTGGATACGTGTACAGATACCAGCTCGCCGATACGCTGTGCCGTGACGCACCTGCATCGGTCGCGGCTTTACAGCAACATCACCACGAACCATGCGTACACAGCCGCCGCATCTGCTAAAACCCATAACCACCAGCTTGACGCGCGCAGCTTTCCATCGCGTCCAGA
 AAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGTTTCCTCTTATATCAGGTCCAGAACGGACCGTTCATTCACAACCGTGTTTGTAAACGGCTTTCGCGGTCACTTCCTGTCTGACGCGGCACGCTGGCCACCAGCGCCAGCTCGATTATTTCTTGCACGCTACAACCACGAGAGAGAGAGATCGTGCATCGGCCGGCAAGTCCCTTGTATCAGTGGCCGACGGCACGATATCCGCCGGTCGTTGTGCGATTTTTAACCATATTTCCGGGCTTCCAGCGACAGGA
 AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCACAACTGTAACTCGCCTCCACACCAGCTTTGGTGCAGCGCTCACGGACTGATTTCTGGCCGCTGCTGGACGTTAGCAACAACCGGGGTGACGGGCGCTACCATTGCTGGAAAACGACACGCCACGCGTCGGCTCTTCCCGGTGATGGCGCGCCAGGTTTCGGCACTCAGCAAA";
-        let aligner = build_asts_aligner(false);
-        let aligner = aligner.with_seq_and_id(icing_reads.as_bytes(), b"icing").unwrap();
+        let aligner = build_asts_aligner(
+            false,
+            &mm2::params::IndexParams::default(),
+            &mm2::params::MapParams::default(),
+            &mm2::params::AlignParams::default(),
+        );
+        let aligner = aligner
+            .with_seq_and_id(icing_reads.as_bytes(), b"icing")
+            .unwrap();
         let mut target_idx = HashMap::new();
         target_idx.insert("icing".to_string(), (0, icing_reads.len()));
-        for hit in aligner.map(sbr.as_bytes(), false, false, None, None, Some(b"sbr")).unwrap() {
+        for hit in aligner
+            .map(sbr.as_bytes(), false, false, None, None, Some(b"sbr"))
+            .unwrap()
+        {
             if hit.is_primary {
                 let query_record = ReadInfo::new_fa_record("name".to_string(), sbr.to_string());
                 let record = build_bam_record_from_mapping(&hit, &query_record, &target_idx);
 
-                let (ref_aligned, query_aligned) = draw_aligned_seq(&record, icing_reads.as_bytes(), Some(590), Some(620));
+                let (ref_aligned, query_aligned) =
+                    draw_aligned_seq(&record, icing_reads.as_bytes(), Some(590), Some(620));
                 println!("\n{}\n{}", ref_aligned, query_aligned)
-
             }
-
         }
-
-
     }
-
 }

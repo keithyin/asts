@@ -1,3 +1,4 @@
 target
 *aligned.bam*
 *.log
+**/*.pyc

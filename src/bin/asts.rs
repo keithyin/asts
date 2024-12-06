@@ -30,9 +30,9 @@ pub struct Cli {
 
     // #[command(flatten)]
     // pub map_args: cli::MapArgs,
+    #[command(flatten)]
+    pub align_args: AlignArgs,
 
-    // #[command(flatten)]
-    // pub align_args: cli::AlignArgs,
     #[command(flatten)]
     pub oup_args: OupArgs,
 }
@@ -70,13 +70,13 @@ pub struct IoArgs {
 
     #[arg(
         long = "np-range",
-        help = "1-3,5,7-9 means [[1, 3], [5, 5], [7, 9]]. smc np_range. only valid for smc input that contains np field"
+        help = "1:3,5,7:9 means [[1, 3], [5, 5], [7, 9]]. target np_range. only valid for target that contains np field"
     )]
     pub np_range: Option<String>,
 
     #[arg(
         long = "rq-range",
-        help = "0.9~1.1 means 0.9<=rq<=1.1. smc rq_range. only valid for smc input that contains rq field"
+        help = "0.9:1.1 means 0.9<=rq<=1.1. target rq_range. only valid for target that contains rq field"
     )]
     pub rq_range: Option<String>,
 }
@@ -92,6 +92,52 @@ impl IoArgs {
 
         param = if let Some(ref rq_range_str) = self.rq_range {
             param.set_rq_range(rq_range_str)
+        } else {
+            param
+        };
+
+        param
+    }
+}
+
+#[derive(Debug, Args, Clone, Default)]
+pub struct AlignArgs {
+    #[arg(short = 'm', help = "matching_score>=0, recommend 2")]
+    matching_score: Option<i32>,
+
+    #[arg(short = 'M', help = "mismatch_penalty >=0, recommend 4")]
+    mismatch_penalty: Option<i32>,
+
+    #[arg(short = 'o', help = "gap_open_penalty >=0, recommend 4,24")]
+    gap_open_penalty: Option<String>,
+
+    #[arg(short = 'e', help = "gap_extension_penalty >=0, recommend 2,1")]
+    gap_extension_penalty: Option<String>,
+}
+
+impl AlignArgs {
+    pub fn to_align_params(&self) -> mm2::params::AlignParams {
+        let mut param = mm2::params::AlignParams::new();
+        param = if let Some(ms) = self.matching_score {
+            param.set_m_score(ms)
+        } else {
+            param
+        };
+
+        param = if let Some(mms) = self.mismatch_penalty {
+            param.set_mm_score(mms)
+        } else {
+            param
+        };
+
+        param = if let Some(ref go) = self.gap_open_penalty {
+            param.set_gap_open_penalty(go.to_string())
+        } else {
+            param
+        };
+
+        param = if let Some(ref ge) = self.gap_extension_penalty {
+            param.set_gap_extension_penalty(ge.to_string())
         } else {
             param
         };
@@ -200,6 +246,10 @@ fn main() {
     let oup_params = args.oup_args.to_oup_params();
     let input_filter_params = args.io_args.to_input_filter_params();
 
+    let index_params = mm2::params::IndexParams::default();
+    let map_params = mm2::params::MapParams::default();
+    let align_params = args.align_args.to_align_params();
+
     let o_path = thread::scope(|s| {
         let args = &args;
         let sorted_sbr = &sorted_sbr;
@@ -207,6 +257,9 @@ fn main() {
         let target2idx = &target2idx;
         let oup_params = &oup_params;
         let input_filter_params = &input_filter_params;
+        let index_params = &index_params;
+        let map_params = &map_params;
+        let align_params = &align_params;
 
         let (sbr_and_smc_sender, sbr_and_smc_recv) = crossbeam::channel::bounded(1000);
         s.spawn(move || {
@@ -224,7 +277,7 @@ fn main() {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
             s.spawn(move || {
-                align_worker(sbr_and_smc_recv_, align_res_sender_, target2idx);
+                align_worker(sbr_and_smc_recv_, align_res_sender_, target2idx, index_params, map_params, align_params);
             });
         }
         drop(sbr_and_smc_recv);
