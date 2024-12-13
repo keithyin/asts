@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 description = "asts"
 license = "MIT"
@@ -21,4 +21,4 @@ minimap2="0.1.21"
 num_cpus="1.16"
 crossbeam="0.8"
 mm2 = "0.13"
-gskits = "0.9"
+gskits = "0.10"
