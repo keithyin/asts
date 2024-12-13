@@ -251,6 +251,9 @@ fn main() {
     let align_params = args.align_args.to_align_params();
 
     let o_path = thread::scope(|s| {
+        let tot_threads = args.threads.unwrap_or(num_cpus::get());
+        assert!(tot_threads >= 10, "at least 10 threads");
+
         let args = &args;
         let sorted_sbr = &sorted_sbr;
         let sorted_smc = &sorted_smc;
@@ -271,13 +274,20 @@ fn main() {
             );
         });
 
-        let threads = args.threads.unwrap_or(num_cpus::get_physical());
+        let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
-        for _ in 0..threads {
+        for _ in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
             s.spawn(move || {
-                align_worker(sbr_and_smc_recv_, align_res_sender_, target2idx, index_params, map_params, align_params);
+                align_worker(
+                    sbr_and_smc_recv_,
+                    align_res_sender_,
+                    target2idx,
+                    index_params,
+                    map_params,
+                    align_params,
+                );
             });
         }
         drop(sbr_and_smc_recv);
