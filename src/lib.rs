@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use crossbeam::channel::Sender;
 use gskits::ds::ReadInfo;
 use minimap2::{Aligner, PresetSet};
-use mm2::params::{InputFilterParams, TOverrideAlignerParam};
+use mm2::{
+    params::{InputFilterParams, TOverrideAlignerParam},
+    NoMemLeakAligner,
+};
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
@@ -136,13 +139,14 @@ pub fn align(
         align_params,
     );
 
-    let aligner = aligner
+    let aligner: NoMemLeakAligner = aligner
         .with_seq_and_id(
             subreads_and_smc.smc.seq.as_bytes(),
             subreads_and_smc.smc.name.as_bytes(),
         )
         // .with_seq(subreads_and_smc.smc.seq.as_bytes())
-        .unwrap();
+        .unwrap()
+        .into();
 
     let mut bam_records = vec![];
 
@@ -273,7 +277,7 @@ mod tests {
         fastx_reader::fasta_reader::FastaFileReader,
         gsbam::bam_record_ext::{BamReader, BamRecordExt},
     };
-    use mm2::build_bam_record_from_mapping;
+    use mm2::{build_bam_record_from_mapping, NoMemLeakAligner};
 
     use super::*;
 
@@ -410,7 +414,7 @@ mod tests {
 
         let ref_seq = "CCCCTTTTAAAAGGGGGAGAGA";
         let q_seq = "CCCCTTTTAAAAGGGGGAGAGA";
-        let aligner = aligner.with_seq(ref_seq.as_bytes()).unwrap();
+        let aligner = NoMemLeakAligner(aligner.with_seq(ref_seq.as_bytes()).unwrap());
 
         for hit in aligner
             .map(q_seq.as_bytes(), false, false, None, None, Some(b"query"))
