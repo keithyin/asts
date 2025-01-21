@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "0.6.6"
+version = "0.6.7"
 edition = "2021"
 description = "asts"
 license = "MIT"
@@ -22,3 +22,10 @@ num_cpus="1.16"
 crossbeam="0.8"
 mm2 = "0.15.1"
 gskits = "0.10"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "benchmark"
+harness = false
