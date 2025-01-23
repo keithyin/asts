@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.6.6"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -168,7 +168,7 @@ dependencies = [
  "statrs 0.16.1",
  "strum 0.25.0",
  "strum_macros 0.25.3",
- "thiserror",
+ "thiserror 1.0.69",
  "triple_accel",
  "vec_map",
 ]
@@ -207,7 +207,7 @@ dependencies = [
  "statrs 0.17.1",
  "strum 0.26.3",
  "strum_macros 0.26.4",
- "thiserror",
+ "thiserror 1.0.69",
  "triple_accel",
  "vec_map",
 ]
@@ -222,7 +222,7 @@ dependencies = [
  "lazy_static",
  "regex",
  "strum_macros 0.26.4",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -549,20 +549,20 @@ dependencies = [
 
 [[package]]
 name = "derive-new"
-version = "0.5.9"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3418329ca0ad70234b9735dc4ceed10af4df60eff9c8e7b06cb5e520d92c3535"
+checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.90",
 ]
 
 [[package]]
 name = "derive-new"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d150dea618e920167e5973d70ae6ece4385b7164e0d799fe7c122dd0a5d912ad"
+checksum = "2cdc8d50f426189eef89dac62fabfa0abb27d5cc008f25bf4156a0203325becc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -682,9 +682,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "gskits"
-version = "0.10.0"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1077569447c899f422d201b836c65ae3d186500f4ebd6f024c2790d2e873fbb"
+checksum = "4d7439f3c204aaf84ec72a1772eaa83ef1e9d229504b5e8f4efb63190edfb56d"
 dependencies = [
  "anyhow",
  "bio 2.0.3",
@@ -1127,9 +1127,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.15.1"
+version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1ddef8c27f08efd92fb3b629212057412e670bea13e26aec235c71f4809992f"
+checksum = "21bc3380dedd8bdffd71f636ad96f16d625701f20c6df66a6bac080c933714b1"
 dependencies = [
  "anyhow",
  "bio 1.6.0",
@@ -1614,14 +1614,14 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
 name = "rust-htslib"
-version = "0.47.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f62b46e47d8b025589565f0eefe83e8646faf0faf74d17014b1b6ea2c1504930"
+checksum = "115ae57b89deb942275566eca8c31da053d8df0d8bda12e50c4c4aa994877068"
 dependencies = [
  "bio-types",
  "byteorder",
  "custom_derive",
- "derive-new 0.5.9",
+ "derive-new 0.7.0",
  "hts-sys",
  "ieee754",
  "lazy_static",
@@ -1630,7 +1630,7 @@ dependencies = [
  "linear-map",
  "newtype_derive",
  "regex",
- "thiserror",
+ "thiserror 2.0.11",
  "url",
 ]
 
@@ -1875,7 +1875,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+dependencies = [
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -1883,6 +1892,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",

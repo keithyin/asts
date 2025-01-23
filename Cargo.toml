@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "0.6.6"
+version = "0.7.0"
 edition = "2021"
 description = "asts"
 license = "MIT"
@@ -11,7 +11,7 @@ exclude = [
 
 [dependencies]
 clap = {version="4.4", features=["derive"]}
-rust-htslib = "0.47.0"
+rust-htslib = "0.49"
 tracing = "0.1.40"
 tracing-subscriber = {version="0.3.18", features=["json", "env-filter", "fmt", "time", "local-time"]}
 time = "0.3.34"
@@ -20,5 +20,5 @@ indicatif= {version="0.17.7"}
 minimap2="0.1.21"
 num_cpus="1.16"
 crossbeam="0.8"
-mm2 = "0.15.1"
-gskits = "0.10"
+mm2 = "0.20"
+gskits = "0.11"
