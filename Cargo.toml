@@ -22,3 +22,10 @@ num_cpus="1.16"
 crossbeam="0.8"
 mm2 = "0.20"
 gskits = "0.11"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "benchmark"
+harness = false

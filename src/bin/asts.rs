@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, path, thread};
 
-use asts::{align_worker, subreads_and_smc_generator};
+use asts::{align_sbr_to_smc_worker, subreads_and_smc_generator};
 use gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
@@ -280,7 +280,7 @@ fn main() {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
             s.spawn(move || {
-                align_worker(
+                align_sbr_to_smc_worker(
                     sbr_and_smc_recv_,
                     align_res_sender_,
                     target2idx,

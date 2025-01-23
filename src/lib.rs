@@ -41,9 +41,9 @@ pub fn subreads_and_smc_generator(
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
 ) {
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
-    smc_bam_reader.set_threads(5).unwrap();
+    smc_bam_reader.set_threads(4).unwrap();
     let mut subreads_bam_reader = rust_htslib::bam::Reader::from_path(sorted_sbr_bam).unwrap();
-    subreads_bam_reader.set_threads(5).unwrap();
+    subreads_bam_reader.set_threads(4).unwrap();
 
     let mut smc_records = smc_bam_reader.records();
     let mut subreads_records = subreads_bam_reader.records();
@@ -97,7 +97,7 @@ pub fn subreads_and_smc_generator(
     }
 }
 
-pub fn align_worker(
+pub fn align_sbr_to_smc_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<mm2::AlignResult>,
     target_idx: &HashMap<String, (usize, usize)>,
@@ -107,7 +107,7 @@ pub fn align_worker(
 ) {
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
-        let align_infos = align(
+        let align_infos = align_sbr_to_smc(
             &subreads_and_smc,
             target_idx,
             index_params,
@@ -125,7 +125,7 @@ pub fn align_worker(
     }
 }
 
-pub fn align(
+pub fn align_sbr_to_smc(
     subreads_and_smc: &SubreadsAndSmc,
     target_idx: &HashMap<String, (usize, usize)>,
     index_params: &mm2::params::IndexParams,
@@ -169,6 +169,7 @@ pub fn align(
                 bam_record = Some(mm2::build_bam_record_from_mapping(
                     &hit, subread, target_idx,
                 ));
+                break;
             }
         }
         bam_records.push(bam_record);
@@ -298,7 +299,7 @@ mod tests {
 
         let mut target2idx = HashMap::new();
         target2idx.insert("hello".to_string(), (0, subreads_and_smc.smc.seq.len()));
-        let records = align(
+        let records = align_sbr_to_smc(
             &subreads_and_smc,
             &target2idx,
             &mm2::params::IndexParams::default(),
