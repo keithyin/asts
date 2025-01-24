@@ -15,26 +15,34 @@ type BamRecord = rust_htslib::bam::record::Record;
 
 pub struct SubreadsAndSmc {
     pub smc: ReadInfo,
+    smc_len: usize,
     pub subreads: Vec<ReadInfo>,
-}
-
-pub struct SingleChannelAlignRes {
-    pub records: Vec<BamRecord>,
 }
 
 impl SubreadsAndSmc {
     pub fn new(smc_record: &rust_htslib::bam::Record) -> Self {
+        let smc_len = smc_record.seq_len();
         Self {
             smc: ReadInfo::from_bam_record(smc_record, None),
+            smc_len: smc_len,
             subreads: vec![],
         }
     }
 
     pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) {
-        if record.seq_len() < self.smc.seq.len() * 2 {
+        let sbr_len = record.seq_len() as f64;
+        let smc_len = self.smc_len as f64;
+        let max_len = smc_len * 1.75;
+        let min_len = smc_len * 0.0;
+
+        if sbr_len > min_len && sbr_len < max_len {
             self.subreads.push(ReadInfo::from_bam_record(record, None));
         }
     }
+}
+
+pub struct SingleChannelAlignRes {
+    pub records: Vec<BamRecord>,
 }
 
 pub fn subreads_and_smc_generator(
@@ -43,7 +51,7 @@ pub fn subreads_and_smc_generator(
     input_filter_params: &InputFilterParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
 ) {
-    let n_threads = 1;
+    let n_threads = 2;
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
     smc_bam_reader.set_threads(n_threads).unwrap();
     let mut subreads_bam_reader = rust_htslib::bam::Reader::from_path(sorted_sbr_bam).unwrap();
@@ -314,21 +322,17 @@ pub fn draw_aligned_seq(
 
 #[cfg(test)]
 mod tests {
-    use gskits::{
-        fastx_reader::fasta_reader::FastaFileReader,
-        gsbam::bam_record_ext::{BamReader, BamRecordExt},
-    };
+    use gskits::fastx_reader::fasta_reader::FastaFileReader;
     use mm2::{build_bam_record_from_mapping, NoMemLeakAligner};
 
     use super::*;
 
     #[test]
     fn test_align() {
+        let smc_seq = "CACTCTTTAAAAGGGGGGTTGAGG";
         let subreads_and_smc = SubreadsAndSmc {
-            smc: ReadInfo::new_fa_record(
-                "hello".to_string(),
-                "CACTCTTTAAAAGGGGGGTTGAGG".to_string(),
-            ),
+            smc: ReadInfo::new_fa_record("hello".to_string(), smc_seq.to_string()),
+            smc_len: smc_seq.len(),
             subreads: vec![
                 ReadInfo::new_fa_record("".to_string(), "CACTCTTTAAAAGGGGGGGGTTGAGG".to_string()),
                 ReadInfo::new_fa_record("".to_string(), "CACTATTTAAAAGGGGGGTTGAGG".to_string()),
