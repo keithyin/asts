@@ -276,19 +276,22 @@ fn main() {
 
         let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
-        for _ in 0..align_threads {
+        for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
-            s.spawn(move || {
-                align_sbr_to_smc_worker(
-                    sbr_and_smc_recv_,
-                    align_res_sender_,
-                    target2idx,
-                    index_params,
-                    map_params,
-                    align_params,
-                );
-            });
+            thread::Builder::new()
+                .name(format!("align_sbr_to_smc_worker-{}", idx))
+                .spawn_scoped(s, move || {
+                    align_sbr_to_smc_worker(
+                        sbr_and_smc_recv_,
+                        align_res_sender_,
+                        target2idx,
+                        index_params,
+                        map_params,
+                        align_params,
+                    )
+                })
+                .unwrap();
         }
         drop(sbr_and_smc_recv);
         drop(align_res_sender);
