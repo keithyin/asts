@@ -4,6 +4,7 @@ use crossbeam::channel::Sender;
 use gskits::{ds::ReadInfo, utils::ScopedTimer};
 use minimap2::{Aligner, PresetSet};
 use mm2::{
+    mapping_ext::MappingExt,
     params::{InputFilterParams, TOverrideAlignerParam},
     NoMemLeakAligner,
 };
@@ -126,6 +127,7 @@ pub fn align_sbr_to_smc_worker(
     index_params: &mm2::params::IndexParams,
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
+    oup_params: &mm2::params::OupParams,
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -142,6 +144,7 @@ pub fn align_sbr_to_smc_worker(
             index_params,
             map_params,
             align_params,
+            oup_params,
         );
 
         let elapsed_secs = start.elapsed().as_secs();
@@ -159,8 +162,9 @@ pub fn align_sbr_to_smc_worker(
         };
 
         timer.done_with_cnt(1);
-
-        sender.send(align_res).unwrap();
+        if align_res.records.len() > 0 {
+            sender.send(align_res).unwrap();
+        }
     }
 
     tracing::info!(
@@ -179,6 +183,7 @@ pub fn align_sbr_to_smc(
     index_params: &mm2::params::IndexParams,
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
+    oup_params: &mm2::params::OupParams,
 ) -> Vec<Option<BamRecord>> {
     let aligner = build_asts_aligner(
         subreads_and_smc.smc.seq.len() < 200,
@@ -213,6 +218,15 @@ pub fn align_sbr_to_smc(
 
         for hit in hits {
             // no supp is needed !!
+            let hit_ext = MappingExt(&hit);
+            let identity = hit_ext.identity();
+            let coverage = hit_ext.query_coverage();
+            if coverage < oup_params.oup_coverage_threshold
+                || identity < oup_params.oup_identity_threshold
+            {
+                continue;
+            }
+
             if hit.is_primary && !hit.is_supplementary {
                 bam_record = Some(mm2::build_bam_record_from_mapping(
                     &hit, subread, target_idx,
@@ -349,6 +363,7 @@ mod tests {
             &mm2::params::IndexParams::default(),
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
+            &mm2::params::OupParams::default(),
         );
         for record in records {
             println!("{:?}", record.unwrap().cigar());

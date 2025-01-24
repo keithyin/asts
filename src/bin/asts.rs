@@ -190,17 +190,22 @@ fn main() {
     )
     .unwrap();
 
-    // let timer = tracing_subscriber::fmt::time::OffsetTime::new(time_offset, time_fmt);
-    // let timer = tracing_subscriber::fmt::time::LocalTime::new(time_fmt);
     let time_offset =
         time::UtcOffset::current_local_offset().unwrap_or_else(|_| time::UtcOffset::UTC);
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(time_offset, time_fmt);
 
-    tracing_subscriber::fmt::fmt().with_timer(timer).init();
-
     let mut tmp_files = vec![];
-
     let args = Cli::parse();
+    let o_path = format!("{}.bam", args.io_args.prefix);
+    let log_path = format!("{}.log", args.io_args.prefix);
+    let log_file = std::fs::File::create(log_path).unwrap();
+    let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
+    tracing_subscriber::fmt::fmt()
+        .with_timer(timer)
+        .with_ansi(false)
+        .with_writer(non_blocking)
+        .init();
+
     let smc_fname = if args.io_args.smc.ends_with(".bam") {
         args.io_args.smc.clone()
     } else {
@@ -250,7 +255,7 @@ fn main() {
     let map_params = mm2::params::MapParams::default();
     let align_params = args.align_args.to_align_params();
 
-    let o_path = thread::scope(|s| {
+    thread::scope(|s| {
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");
 
@@ -289,6 +294,7 @@ fn main() {
                         index_params,
                         map_params,
                         align_params,
+                        oup_params,
                     )
                 })
                 .unwrap();
@@ -296,7 +302,6 @@ fn main() {
         drop(sbr_and_smc_recv);
         drop(align_res_sender);
 
-        let o_path = format!("{}.bam", args.io_args.prefix);
         mm2::bam_writer::write_bam_worker(
             align_res_recv,
             target2idx,
@@ -306,7 +311,6 @@ fn main() {
             env!("CARGO_PKG_VERSION"),
             true,
         );
-        o_path
     });
 
     tracing::info!("sorting result bam");
