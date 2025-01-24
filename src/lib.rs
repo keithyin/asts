@@ -31,7 +31,9 @@ impl SubreadsAndSmc {
     }
 
     pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) {
-        self.subreads.push(ReadInfo::from_bam_record(record, None));
+        if record.seq_len() < self.smc.seq.len() * 2 {
+            self.subreads.push(ReadInfo::from_bam_record(record, None));
+        }
     }
 }
 
