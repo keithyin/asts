@@ -7,6 +7,11 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 
 # chagelog
 
+## 0.7.1
+
+* length filter when add sbr to SubreadsAndSmc
+* log file
+
 ## 0.4.0
 
 * dw,cr,ar and qual from sbr.bam will dump the result bam
