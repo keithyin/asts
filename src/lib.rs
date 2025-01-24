@@ -253,6 +253,8 @@ fn build_asts_aligner(
         .with_sam_out()
         .with_index_threads(1);
 
+    aligner.idxopt.set_hpc();
+    
     aligner.idxopt.k = 7;
     aligner.idxopt.w = 5;
 

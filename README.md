@@ -1,11 +1,14 @@
-
-
 ```
 # sbr2smc.aligned.bam and it's corresponding .bam file will be generated
 asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 ```
 
 # chagelog
+
+## 0.8.0
+
+* using hpc
+
 
 ## 0.7.1
 
@@ -26,6 +29,5 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 * worked
 
 ## 0.1.1
-
 
 ## 0.1.0
