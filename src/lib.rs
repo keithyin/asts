@@ -33,7 +33,7 @@ impl SubreadsAndSmc {
     pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) {
         let sbr_len = record.seq_len() as f64;
         let smc_len = self.smc_len as f64;
-        let max_len = smc_len * 1.75;
+        let max_len = smc_len * 3.0;
         let min_len = smc_len * 0.0;
 
         if sbr_len > min_len && sbr_len < max_len {
