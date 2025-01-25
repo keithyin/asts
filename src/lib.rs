@@ -251,7 +251,7 @@ pub fn align_sbr_to_smc(
             no_hit_subreads_idx.push(i);
         }
     });
-       
+
     (bam_records, no_hit_subreads_idx)
 }
 
