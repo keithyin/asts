@@ -183,7 +183,6 @@ pub fn align_sbr_to_smc_worker(
         max_time,
         max_time_qname
     );
-    tracing::info!("")
 }
 
 pub fn align_sbr_to_smc(

@@ -8,6 +8,9 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 ## 0.8.0
 
 * using hpc
+* default kmer/wins and fallback kmer/wins
+
+
 
 
 ## 0.7.1
