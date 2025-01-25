@@ -265,7 +265,6 @@ fn main() {
         let target2idx = &target2idx;
         let oup_params = &oup_params;
         let input_filter_params = &input_filter_params;
-        let index_params = &index_params;
         let map_params = &map_params;
         let align_params = &align_params;
 
@@ -291,7 +290,6 @@ fn main() {
                         sbr_and_smc_recv_,
                         align_res_sender_,
                         target2idx,
-                        index_params,
                         map_params,
                         align_params,
                         oup_params,

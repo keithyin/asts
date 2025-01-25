@@ -124,7 +124,6 @@ pub fn align_sbr_to_smc_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<mm2::AlignResult>,
     target_idx: &HashMap<String, (usize, usize)>,
-    index_params: &mm2::params::IndexParams,
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
     oup_params: &mm2::params::OupParams,
@@ -138,14 +137,28 @@ pub fn align_sbr_to_smc_worker(
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
         let start = Instant::now();
-        let align_infos = align_sbr_to_smc(
+        let (mut align_infos, no_hit_indices) = align_sbr_to_smc(
             &subreads_and_smc,
+            (0..subreads_and_smc.subreads.len()).collect(),
             target_idx,
-            index_params,
             map_params,
             align_params,
             oup_params,
+            false
         );
+
+        if !no_hit_indices.is_empty() {
+            let (fallback_align_infos, _) = align_sbr_to_smc(
+                &subreads_and_smc,
+                no_hit_indices,
+                target_idx,
+                map_params,
+                align_params,
+                oup_params,
+                true
+            );
+            align_infos.extend(fallback_align_infos);
+        }
 
         let elapsed_secs = start.elapsed().as_secs();
         if elapsed_secs > max_time {
@@ -154,11 +167,7 @@ pub fn align_sbr_to_smc_worker(
         }
 
         let align_res = mm2::AlignResult {
-            records: align_infos
-                .into_iter()
-                .filter(|rec| rec.is_some())
-                .map(|v| v.unwrap())
-                .collect::<Vec<_>>(),
+            records: align_infos,
         };
 
         timer.done_with_cnt(1);
@@ -179,15 +188,16 @@ pub fn align_sbr_to_smc_worker(
 
 pub fn align_sbr_to_smc(
     subreads_and_smc: &SubreadsAndSmc,
+    sbr_indices: Vec<usize>,
     target_idx: &HashMap<String, (usize, usize)>,
-    index_params: &mm2::params::IndexParams,
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
     oup_params: &mm2::params::OupParams,
-) -> Vec<Option<BamRecord>> {
+    fallback: bool,
+) -> (Vec<BamRecord>, Vec<usize>) {
     let aligner = build_asts_aligner(
         subreads_and_smc.smc.seq.len() < 200,
-        index_params,
+        fallback,
         map_params,
         align_params,
     );
@@ -202,8 +212,10 @@ pub fn align_sbr_to_smc(
         .into();
 
     let mut bam_records = vec![];
+    let mut no_hit_subreads_idx = vec![];
 
-    for subread in subreads_and_smc.subreads.iter() {
+    sbr_indices.into_iter().for_each(|i| {
+        let subread = &subreads_and_smc.subreads[i];
         let hits = aligner
             .map(
                 subread.seq.as_bytes(),
@@ -214,8 +226,8 @@ pub fn align_sbr_to_smc(
                 Some(subread.name.as_bytes()),
             )
             .unwrap();
-        let mut bam_record = None;
 
+        let mut has_hit = false;
         for hit in hits {
             // no supp is needed !!
             let hit_ext = MappingExt(&hit);
@@ -228,22 +240,27 @@ pub fn align_sbr_to_smc(
             }
 
             if hit.is_primary && !hit.is_supplementary {
-                bam_record = Some(mm2::build_bam_record_from_mapping(
-                    &hit, subread, target_idx,
-                ));
+                let bam_record = mm2::build_bam_record_from_mapping(&hit, subread, target_idx);
+                has_hit = true;
+                bam_records.push(bam_record);
+
                 break;
             }
         }
-        bam_records.push(bam_record);
-    }
-    bam_records
+
+        if !has_hit {
+            no_hit_subreads_idx.push(i);
+        }
+    });
+       
+    (bam_records, no_hit_subreads_idx)
 }
 
 /// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
 /// https://github.com/lh3/minimap2/blob/master/minimap.h
 fn build_asts_aligner(
     short_insert: bool,
-    index_params: &mm2::params::IndexParams,
+    fallback: bool,
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
 ) -> Aligner<PresetSet> {
@@ -254,9 +271,17 @@ fn build_asts_aligner(
         .with_index_threads(1);
 
     aligner.idxopt.set_hpc();
-    
-    aligner.idxopt.k = 7;
-    aligner.idxopt.w = 5;
+
+    aligner.mapopt.best_n = 1;
+    aligner.mapopt.q_occ_frac = 0.0;
+
+    if !fallback {
+        aligner.idxopt.k = 12;
+        aligner.idxopt.w = 5;
+    } else {
+        aligner.idxopt.k = 7;
+        aligner.idxopt.w = 5;
+    }
 
     // this is all map-ont default
     // aligner.mapopt.zdrop = 400;
@@ -264,19 +289,21 @@ fn build_asts_aligner(
     // aligner.mapopt.bw = 500;
     // aligner.mapopt.end_bonus = 0;
 
-    aligner.mapopt.best_n = 1;
-    aligner.mapopt.q_occ_frac = 0.0;
-
     if short_insert {
-        aligner.idxopt.k = 4;
-        aligner.idxopt.w = 1;
+        if !fallback {
+            aligner.idxopt.k = 3;
+            aligner.idxopt.w = 1;
+        } else {
+            aligner.idxopt.k = 4;
+            aligner.idxopt.w = 1;
+        }
+
         aligner.mapopt.min_cnt = 2;
         aligner.mapopt.min_dp_max = 10; // min dp score
         aligner.mapopt.min_chain_score = 10; // this is important for short insert
         aligner.mapopt.min_ksw_len = 0;
     }
 
-    index_params.modify_aligner(&mut aligner);
     map_params.modify_aligner(&mut aligner);
     align_params.modify_aligner(&mut aligner);
 
@@ -359,16 +386,17 @@ mod tests {
 
         let mut target2idx = HashMap::new();
         target2idx.insert("hello".to_string(), (0, subreads_and_smc.smc.seq.len()));
-        let records = align_sbr_to_smc(
+        let (records, _) = align_sbr_to_smc(
             &subreads_and_smc,
+            (0..subreads_and_smc.subreads.len()).collect(),
             &target2idx,
-            &mm2::params::IndexParams::default(),
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
             &mm2::params::OupParams::default(),
+            false
         );
         for record in records {
-            println!("{:?}", record.unwrap().cigar());
+            println!("{:?}", record.cigar());
         }
     }
 
@@ -445,7 +473,7 @@ mod tests {
     fn test_build_aligner() {
         let aligner = build_asts_aligner(
             true,
-            &mm2::params::IndexParams::default(),
+            false,
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
         );
@@ -454,7 +482,7 @@ mod tests {
 
         let aligner = build_asts_aligner(
             false,
-            &mm2::params::IndexParams::default(),
+            false,
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
         );
@@ -466,7 +494,7 @@ mod tests {
     fn test_short_insert() {
         let aligner = build_asts_aligner(
             true,
-            &mm2::params::IndexParams::default(),
+            false,
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
         );
@@ -495,7 +523,7 @@ AAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGTTTCCTCTTATATCAGGTCCA
 AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCACAACTGTAACTCGCCTCCACACCAGCTTTGGTGCAGCGCTCACGGACTGATTTCTGGCCGCTGCTGGACGTTAGCAACAACCGGGGTGACGGGCGCTACCATTGCTGGAAAACGACACGCCACGCGTCGGCTCTTCCCGGTGATGGCGCGCCAGGTTTCGGCACTCAGCAAA";
         let aligner = build_asts_aligner(
             false,
-            &mm2::params::IndexParams::default(),
+            false,
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
         );
