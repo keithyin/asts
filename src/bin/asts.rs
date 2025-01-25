@@ -251,7 +251,6 @@ fn main() {
     let oup_params = args.oup_args.to_oup_params();
     let input_filter_params = args.io_args.to_input_filter_params();
 
-    let index_params = mm2::params::IndexParams::default();
     let map_params = mm2::params::MapParams::default();
     let align_params = args.align_args.to_align_params();
 
