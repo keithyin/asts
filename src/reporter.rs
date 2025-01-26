@@ -27,6 +27,7 @@ pub struct SbrReporter {
     pub used_num: usize,
     pub filter_by_length: usize,
     pub filter_by_alignment: usize,
+    pub fallback_num: usize
 }
 
 impl Display for SbrReporter {
@@ -35,14 +36,18 @@ impl Display for SbrReporter {
             f,
             "\
     inp_num:{},
-    filter_by_length:{:.4}% ({}),
+    filter_by_length:{:.4}% ({})
     filter_by_alignment:{:.4}% ({})
+    fallback_num:{:.4}% ({})
         ",
             self.inp_num,
             (self.filter_by_length as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
             self.filter_by_length,
             (self.filter_by_alignment as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
             self.filter_by_alignment,
+            (self.fallback_num as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
+            self.fallback_num,
+
         )
     }
 }

@@ -154,7 +154,7 @@ pub fn align_sbr_to_smc_worker(
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
     oup_params: &mm2::params::OupParams,
-    reporter: Arc<Mutex<Reporter>>
+    reporter: Arc<Mutex<Reporter>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -164,6 +164,7 @@ pub fn align_sbr_to_smc_worker(
     let mut inp_sbrs = 0;
     let mut out_sbrs = 0;
     let mut out_smc = 0;
+    let mut fallback_num = 0;
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
@@ -179,6 +180,7 @@ pub fn align_sbr_to_smc_worker(
             false,
         );
 
+        fallback_num += no_hit_indices.len();
         if !no_hit_indices.is_empty() {
             let (fallback_align_infos, _) = align_sbr_to_smc(
                 &subreads_and_smc,
@@ -214,6 +216,7 @@ pub fn align_sbr_to_smc_worker(
         let mut reporter_ = reporter.lock().unwrap();
         reporter_.sbr_reporter.filter_by_alignment += filter_by_alignment;
         reporter_.channel_reporter.out_num += out_smc;
+        reporter_.sbr_reporter.fallback_num += fallback_num;
     }
 
     tracing::info!(
@@ -268,7 +271,9 @@ pub fn align_sbr_to_smc(
 
         let mut has_hit = false;
         for hit in hits {
+            has_hit = true;
             // no supp is needed !!
+
             let hit_ext = MappingExt(&hit);
             let identity = hit_ext.identity_without_long_indel(10);
             let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());
@@ -280,9 +285,7 @@ pub fn align_sbr_to_smc(
 
             if hit.is_primary && !hit.is_supplementary {
                 let bam_record = mm2::build_bam_record_from_mapping(&hit, subread, target_idx);
-                has_hit = true;
                 bam_records.push(bam_record);
-
                 break;
             }
         }

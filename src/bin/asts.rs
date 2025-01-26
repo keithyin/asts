@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fs, os, path,
-    process::{self, ExitCode},
+    fs, path,
     sync::{Arc, Mutex},
     thread,
 };
@@ -303,7 +302,7 @@ fn main() {
                         map_params,
                         align_params,
                         oup_params,
-                        reporter_
+                        reporter_,
                     )
                 })
                 .unwrap();
@@ -322,8 +321,10 @@ fn main() {
         );
     });
 
-
-    tracing::info!("\n--------Reporter-----------\n{}\n---------------------------------", reporter.lock().unwrap());
+    tracing::info!(
+        "\n--------Reporter-----------\n{}\n---------------------------------",
+        reporter.lock().unwrap()
+    );
 
     tracing::info!("sorting result bam");
     sort_by_coordinates(&o_path, None);
@@ -337,6 +338,4 @@ fn main() {
             tracing::info!("removed tmp file {}", tmp_file);
         }
     }
-
-
 }
