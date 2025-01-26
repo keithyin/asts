@@ -165,6 +165,7 @@ pub fn align_sbr_to_smc_worker(
     let mut out_sbrs = 0;
     let mut out_smc = 0;
     let mut fallback_num = 0;
+    let mut fallback_rescued_num = 0;
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
@@ -182,6 +183,13 @@ pub fn align_sbr_to_smc_worker(
 
         fallback_num += no_hit_indices.len();
         if !no_hit_indices.is_empty() {
+            tracing::warn!(
+                "fallback: smc_name:{}, num_sbrs:{}, num_fallback_sbrs:{}",
+                subreads_and_smc.smc.name,
+                inp_sbrs,
+                no_hit_indices.len(),
+
+            );
             let (fallback_align_infos, _) = align_sbr_to_smc(
                 &subreads_and_smc,
                 no_hit_indices,
@@ -191,6 +199,9 @@ pub fn align_sbr_to_smc_worker(
                 oup_params,
                 true,
             );
+
+            fallback_rescued_num += fallback_align_infos.len();
+
             align_infos.extend(fallback_align_infos);
         }
 
@@ -217,6 +228,7 @@ pub fn align_sbr_to_smc_worker(
         reporter_.sbr_reporter.filter_by_alignment += filter_by_alignment;
         reporter_.channel_reporter.out_num += out_smc;
         reporter_.sbr_reporter.fallback_num += fallback_num;
+        reporter_.sbr_reporter.fallback_resuced_num += fallback_rescued_num;
     }
 
     tracing::info!(
