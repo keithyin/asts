@@ -11,8 +11,6 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 * default kmer/wins and fallback kmer/wins
 
 
-
-
 ## 0.7.1
 
 * length filter when add sbr to SubreadsAndSmc
