@@ -1,6 +1,12 @@
-use std::{collections::HashMap, fs, path, thread};
+use std::{
+    collections::HashMap,
+    fs, os, path,
+    process::{self, ExitCode},
+    sync::{Arc, Mutex},
+    thread,
+};
 
-use asts::{align_sbr_to_smc_worker, subreads_and_smc_generator};
+use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
 use gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
@@ -197,8 +203,8 @@ fn main() {
     let mut tmp_files = vec![];
     let args = Cli::parse();
     let o_path = format!("{}.bam", args.io_args.prefix);
-    let log_path = format!("{}.log", args.io_args.prefix);
-    let log_file = std::fs::File::create(log_path).unwrap();
+    let log_path = format!("{}.asts.log", args.io_args.prefix);
+    let log_file = std::fs::File::create(&log_path).unwrap();
     let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
     tracing_subscriber::fmt::fmt()
         .with_timer(timer)
@@ -228,7 +234,8 @@ fn main() {
             tracing::info!("fasta2bam, {} -> .bam file", args.io_args.smc);
             fasta2bam(&args.io_args.smc, delim, channel_idx)
         } else {
-            panic!("not a valid smc file format");
+            tracing::error!("not a valid smc file format. valid file format : .bam/.fq/.fa/.fasta/.fna, but got:{}", args.io_args.smc);
+            panic!("exit. read log file for more information. {}", log_path);
         }
     };
 
@@ -253,7 +260,7 @@ fn main() {
 
     let map_params = mm2::params::MapParams::default();
     let align_params = args.align_args.to_align_params();
-
+    let reporter = Arc::new(Mutex::new(Reporter::default()));
     thread::scope(|s| {
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");
@@ -268,12 +275,14 @@ fn main() {
         let align_params = &align_params;
 
         let (sbr_and_smc_sender, sbr_and_smc_recv) = crossbeam::channel::bounded(1000);
+        let reporter_ = reporter.clone();
         s.spawn(move || {
             subreads_and_smc_generator(
                 sorted_sbr,
                 sorted_smc,
                 input_filter_params,
                 sbr_and_smc_sender,
+                reporter_,
             );
         });
 
@@ -282,6 +291,8 @@ fn main() {
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
+            let reporter_ = reporter.clone();
+
             thread::Builder::new()
                 .name(format!("align_sbr_to_smc_worker-{}", idx))
                 .spawn_scoped(s, move || {
@@ -292,6 +303,7 @@ fn main() {
                         map_params,
                         align_params,
                         oup_params,
+                        reporter_
                     )
                 })
                 .unwrap();
@@ -310,6 +322,9 @@ fn main() {
         );
     });
 
+
+    tracing::info!("\n--------Reporter-----------\n{}\n---------------------------------", reporter.lock().unwrap());
+
     tracing::info!("sorting result bam");
     sort_by_coordinates(&o_path, None);
 
@@ -322,4 +337,6 @@ fn main() {
             tracing::info!("removed tmp file {}", tmp_file);
         }
     }
+
+
 }

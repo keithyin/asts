@@ -1,4 +1,9 @@
-use std::{collections::HashMap, thread, time::Instant};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    thread,
+    time::Instant,
+};
 
 use crossbeam::channel::Sender;
 use gskits::{ds::ReadInfo, utils::ScopedTimer};
@@ -8,8 +13,11 @@ use mm2::{
     params::{InputFilterParams, TOverrideAlignerParam},
     NoMemLeakAligner,
 };
+use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
+
+pub mod reporter;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
@@ -30,7 +38,7 @@ impl SubreadsAndSmc {
         }
     }
 
-    pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) {
+    pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) -> bool {
         let sbr_len = record.seq_len() as f64;
         let smc_len = self.smc_len as f64;
         let max_len = smc_len * 3.0;
@@ -38,6 +46,9 @@ impl SubreadsAndSmc {
 
         if sbr_len > min_len && sbr_len < max_len {
             self.subreads.push(ReadInfo::from_bam_record(record, None));
+            true
+        } else {
+            false
         }
     }
 }
@@ -51,6 +62,7 @@ pub fn subreads_and_smc_generator(
     sorted_smc_bam: &str,
     input_filter_params: &InputFilterParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
+    reporter: Arc<Mutex<Reporter>>,
 ) {
     let n_threads = 2;
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
@@ -67,6 +79,10 @@ pub fn subreads_and_smc_generator(
     let mut scoped_timer = ScopedTimer::new();
 
     let mut timer = scoped_timer.perform_timing();
+    let mut cnt = 0;
+    let mut sbr_inp_cnt = 0;
+    let mut sbr_filter_by_length = 0;
+
     loop {
         if smc_record_opt.is_none() {
             break;
@@ -100,18 +116,29 @@ pub fn subreads_and_smc_generator(
 
             found = true;
             let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
-            subreads_and_smc.add_subread(sbr);
+            sbr_inp_cnt += 1;
+            if subreads_and_smc.add_subread(sbr) {
+                sbr_filter_by_length += 1;
+            }
 
             sbr_record_opt = subreads_records.next();
         }
 
         timer.done_with_cnt(1);
+        cnt += 1;
         sender.send(subreads_and_smc).unwrap();
         timer = scoped_timer.perform_timing();
         if sbr_record_opt.is_none() {
             break;
         }
         smc_record_opt = smc_records.next();
+    }
+
+    {
+        let mut reporter_ = reporter.lock().unwrap();
+        reporter_.channel_reporter.inp_num += cnt;
+        reporter_.sbr_reporter.inp_num += sbr_inp_cnt;
+        reporter_.sbr_reporter.filter_by_length += sbr_filter_by_length;
     }
 
     tracing::info!(
@@ -127,16 +154,21 @@ pub fn align_sbr_to_smc_worker(
     map_params: &mm2::params::MapParams,
     align_params: &mm2::params::AlignParams,
     oup_params: &mm2::params::OupParams,
+    reporter: Arc<Mutex<Reporter>>
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
     let mut max_time = 0;
     let mut max_time_qname = String::new();
 
+    let mut inp_sbrs = 0;
+    let mut out_sbrs = 0;
+    let mut out_smc = 0;
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
         let start = Instant::now();
+        inp_sbrs += subreads_and_smc.subreads.len();
         let (mut align_infos, no_hit_indices) = align_sbr_to_smc(
             &subreads_and_smc,
             (0..subreads_and_smc.subreads.len()).collect(),
@@ -169,11 +201,19 @@ pub fn align_sbr_to_smc_worker(
         let align_res = mm2::AlignResult {
             records: align_infos,
         };
-
+        out_sbrs += align_res.records.len();
         timer.done_with_cnt(1);
         if align_res.records.len() > 0 {
+            out_smc += 1;
             sender.send(align_res).unwrap();
         }
+    }
+
+    let filter_by_alignment = inp_sbrs - out_sbrs;
+    {
+        let mut reporter_ = reporter.lock().unwrap();
+        reporter_.sbr_reporter.filter_by_alignment += filter_by_alignment;
+        reporter_.channel_reporter.out_num += out_smc;
     }
 
     tracing::info!(

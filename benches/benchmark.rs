@@ -1,4 +1,6 @@
-use asts::subreads_and_smc_generator;
+use std::sync::{Arc, Mutex};
+
+use asts::{reporter::Reporter, subreads_and_smc_generator};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use gskits::samtools::sort_by_tag;
 use mm2::params::InputFilterParams;
@@ -14,11 +16,14 @@ fn subreads_and_smc_generator_benchmark(c: &mut Criterion) {
         b.iter(|| {
             let (sender, recv) = crossbeam::channel::unbounded();
             let recv = black_box(recv);
+            let reporter = Arc::new(Mutex::new(Reporter::default()));
+
             subreads_and_smc_generator(
                 black_box(&sorted_sbr),
                 black_box(&sorted_smc),
                 black_box(&input_filter_param),
                 black_box(sender),
+                reporter,
             );
         })
     });
