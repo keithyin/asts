@@ -1225,9 +1225,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.20.3"
+version = "0.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56a26d6a770851933c0a2659aa2fd2b263c07523866a80981f24057fba428bb2"
+checksum = "2780960c36eb681dafa510a0da59c185e423e69ced596f3e8263fa3a965607b2"
 dependencies = [
  "anyhow",
  "bio 1.6.0",

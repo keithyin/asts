@@ -144,7 +144,7 @@ pub fn align_sbr_to_smc_worker(
             map_params,
             align_params,
             oup_params,
-            false
+            false,
         );
 
         if !no_hit_indices.is_empty() {
@@ -155,7 +155,7 @@ pub fn align_sbr_to_smc_worker(
                 map_params,
                 align_params,
                 oup_params,
-                true
+                true,
             );
             align_infos.extend(fallback_align_infos);
         }
@@ -230,8 +230,8 @@ pub fn align_sbr_to_smc(
         for hit in hits {
             // no supp is needed !!
             let hit_ext = MappingExt(&hit);
-            let identity = hit_ext.identity();
-            let coverage = hit_ext.query_coverage();
+            let identity = hit_ext.identity_without_long_indel(10);
+            let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());
             if coverage < oup_params.oup_coverage_threshold
                 || identity < oup_params.oup_identity_threshold
             {
@@ -392,7 +392,7 @@ mod tests {
             &mm2::params::MapParams::default(),
             &mm2::params::AlignParams::default(),
             &mm2::params::OupParams::default(),
-            false
+            false,
         );
         for record in records {
             println!("{:?}", record.cigar());
