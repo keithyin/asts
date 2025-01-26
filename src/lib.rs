@@ -117,7 +117,7 @@ pub fn subreads_and_smc_generator(
             found = true;
             let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
             sbr_inp_cnt += 1;
-            if subreads_and_smc.add_subread(sbr) {
+            if !subreads_and_smc.add_subread(sbr) {
                 sbr_filter_by_length += 1;
             }
 
