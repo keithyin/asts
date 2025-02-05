@@ -188,7 +188,6 @@ pub fn align_sbr_to_smc_worker(
                 subreads_and_smc.smc.name,
                 inp_sbrs,
                 no_hit_indices.len(),
-
             );
             let (fallback_align_infos, _) = align_sbr_to_smc(
                 &subreads_and_smc,
@@ -587,10 +586,25 @@ AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCAC
         let mut target_idx = HashMap::new();
         target_idx.insert("icing".to_string(), (0, icing_reads.len()));
         for hit in aligner
-            .map(sbr.as_bytes(), false, false, None, None, Some(b"sbr"))
+            .map(
+                sbr.as_bytes(),
+                false,
+                false,
+                None,
+                Some(&[0x4000000, 0x40000000]),
+                Some(b"sbr"),
+            )
             .unwrap()
         {
             if hit.is_primary {
+                let hit_ext = MappingExt(&hit);
+                println!(
+                    "identity_gap_compressed:{}",
+                    hit_ext.identity_gap_compressed()
+                );
+                println!("identity:{}", hit_ext.identity());
+                println!("query_coverage:{}", hit_ext.query_coverage());
+                println!("target_coverage:{}", hit_ext.target_coverage());
                 let query_record = ReadInfo::new_fa_record("name".to_string(), sbr.to_string());
                 let record = build_bam_record_from_mapping(&hit, &query_record, &target_idx);
 
