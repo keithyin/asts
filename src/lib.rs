@@ -166,6 +166,7 @@ pub fn align_sbr_to_smc_worker(
     let mut out_smc = 0;
     let mut fallback_num = 0;
     let mut fallback_rescued_num = 0;
+
     for subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
@@ -182,11 +183,11 @@ pub fn align_sbr_to_smc_worker(
         );
 
         fallback_num += no_hit_indices.len();
-        if !no_hit_indices.is_empty() {
+        if align_infos.len() < 20 && !no_hit_indices.is_empty() {
             tracing::warn!(
                 "fallback: smc_name:{}, num_sbrs:{}, num_fallback_sbrs:{}",
                 subreads_and_smc.smc.name,
-                inp_sbrs,
+                subreads_and_smc.subreads.len(),
                 no_hit_indices.len(),
             );
             let (fallback_align_infos, _) = align_sbr_to_smc(

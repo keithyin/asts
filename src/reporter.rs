@@ -12,7 +12,7 @@ impl Display for ChannelReporter {
             f,
             "\
     inp_num:{}
-    out_num:{:.4}% ({})
+    oup_num:{:.4}% ({})
         ",
             self.inp_num,
             (self.out_num as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
@@ -50,7 +50,7 @@ impl Display for SbrReporter {
             (self.fallback_num as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
             self.fallback_num,
             (self.fallback_resuced_num as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
-            self.fallback_num,
+            self.fallback_resuced_num,
 
         )
     }
