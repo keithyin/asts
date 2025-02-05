@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "0.9.0-dev"
+version = "0.9.0-dev1"
 edition = "2021"
 description = "asts"
 license = "MIT"
@@ -21,7 +21,7 @@ indicatif= {version="0.17.7"}
 minimap2="0.1.21"
 num_cpus="1.16"
 crossbeam="0.8"
-mm2 = "0.20"
+mm2 = "0.22"
 gskits = "0.11"
 
 [dev-dependencies]

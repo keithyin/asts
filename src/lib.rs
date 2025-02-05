@@ -287,7 +287,7 @@ pub fn align_sbr_to_smc(
             // no supp is needed !!
 
             let hit_ext = MappingExt(&hit);
-            let identity = hit_ext.identity_without_long_indel(10);
+            let identity = hit_ext.identity_gap_compressed();
             let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());
             if coverage < oup_params.oup_coverage_threshold
                 || identity < oup_params.oup_identity_threshold
@@ -345,10 +345,10 @@ fn build_asts_aligner(
 
     if short_insert {
         if !fallback {
-            aligner.idxopt.k = 3;
+            aligner.idxopt.k = 4;
             aligner.idxopt.w = 1;
         } else {
-            aligner.idxopt.k = 4;
+            aligner.idxopt.k = 3;
             aligner.idxopt.w = 1;
         }
 

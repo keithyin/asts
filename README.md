@@ -8,6 +8,8 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 ## 0.9.0
 
 * reporter
+* gsmm2(0.20 -> 0.22)
+* identity_gap_compressed instead of identity_without_long_indel(10)
 
 ## 0.8.0
 

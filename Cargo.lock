@@ -93,7 +93,7 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.9.0-dev"
+version = "0.9.0-dev1"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
@@ -1225,9 +1225,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.20.4"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2780960c36eb681dafa510a0da59c185e423e69ced596f3e8263fa3a965607b2"
+checksum = "470dfad6784ee4f4634b32dd554366937c1f7269e09b48e7de38c40913d86bd6"
 dependencies = [
  "anyhow",
  "bio 1.6.0",
