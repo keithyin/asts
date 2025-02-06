@@ -5,6 +5,10 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 
 # chagelog
 
+## 0.9.1
+
+* reporter bug fix
+
 ## 0.9.0
 
 * reporter
