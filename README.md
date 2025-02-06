@@ -5,6 +5,10 @@ asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
 
 # chagelog
 
+## 0.9.2
+
+* Don't execute fallback alignment when the first stage alignment get enough aligned result.
+
 ## 0.9.1
 
 * reporter bug fix
