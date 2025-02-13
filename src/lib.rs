@@ -324,10 +324,10 @@ fn build_asts_aligner(
         .with_sam_out()
         .with_index_threads(1);
 
-    aligner.idxopt.set_hpc();
+    // aligner.idxopt.set_hpc();
 
     aligner.mapopt.best_n = 1;
-    aligner.mapopt.q_occ_frac = 0.0;
+    // aligner.mapopt.q_occ_frac = 0.0;
 
     if !fallback {
         aligner.idxopt.k = 12;
