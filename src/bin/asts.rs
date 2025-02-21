@@ -157,7 +157,7 @@ pub struct OupArgs {
     pub oup_coverage_threshold: f32,
 
     /// pass through tags. the value will dump to the result bam.
-    #[arg(long = "pt_tags", default_value_t=String::from_str("dw").unwrap(), value_name = "nn,ar")]
+    #[arg(long = "pt_tags", default_value_t=String::from_str("dw").unwrap(), value_name = "dw,ar")]
     pub pass_through_tags: String,
 }
 
