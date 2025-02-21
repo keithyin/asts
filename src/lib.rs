@@ -1,12 +1,12 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     thread,
     time::Instant,
 };
 
 use crossbeam::channel::Sender;
-use gskits::{ds::ReadInfo, utils::ScopedTimer};
+use mm2::gskits::{self, ds::ReadInfo, utils::ScopedTimer};
 use minimap2::{Aligner, PresetSet};
 use mm2::{
     mapping_ext::MappingExt,
@@ -32,20 +32,20 @@ impl SubreadsAndSmc {
     pub fn new(smc_record: &rust_htslib::bam::Record) -> Self {
         let smc_len = smc_record.seq_len();
         Self {
-            smc: ReadInfo::from_bam_record(smc_record, None),
+            smc: ReadInfo::from_bam_record(smc_record, None, &HashSet::new()),
             smc_len: smc_len,
             subreads: vec![],
         }
     }
 
-    pub fn add_subread(&mut self, record: &rust_htslib::bam::Record) -> bool {
+    pub fn add_subread(&mut self, record: &rust_htslib::bam::Record, tags: &HashSet<String>) -> bool {
         let sbr_len = record.seq_len() as f64;
         let smc_len = self.smc_len as f64;
         let max_len = smc_len * 3.0;
         let min_len = smc_len * 0.0;
 
         if sbr_len > min_len && sbr_len < max_len {
-            self.subreads.push(ReadInfo::from_bam_record(record, None));
+            self.subreads.push(ReadInfo::from_bam_record(record, None, tags));
             true
         } else {
             false
@@ -61,6 +61,7 @@ pub fn subreads_and_smc_generator(
     sorted_sbr_bam: &str,
     sorted_smc_bam: &str,
     input_filter_params: &InputFilterParams,
+    oup_params: &mm2::params::OupParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
     reporter: Arc<Mutex<Reporter>>,
 ) {
@@ -117,7 +118,7 @@ pub fn subreads_and_smc_generator(
             found = true;
             let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
             sbr_inp_cnt += 1;
-            if !subreads_and_smc.add_subread(sbr) {
+            if !subreads_and_smc.add_subread(sbr, &oup_params.pass_through_tags) {
                 sbr_filter_by_length += 1;
             }
 

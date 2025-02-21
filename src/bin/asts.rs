@@ -6,7 +6,7 @@ use std::{
 };
 
 use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
-use gskits::{
+use mm2::gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
 };
@@ -158,6 +158,10 @@ pub struct OupArgs {
 
     #[arg(long="oupCovT", default_value_t=-1.0, help="remove the record from the result bam file when the coverage < coverage_threshold")]
     pub oup_coverage_threshold: f32,
+
+    /// pass through tags. the value will dump to the result bam.
+    #[arg(long = "pt_tags", value_name = "nn,ar")]
+    pub pass_through_tags: Option<String>,
 }
 
 impl OupArgs {
@@ -167,7 +171,9 @@ impl OupArgs {
             .set_discard_secondary(true)
             .set_discard_supplementary(true)
             .set_oup_identity_threshold(self.oup_identity_threshold)
-            .set_oup_coverage_threshold(self.oup_coverage_threshold);
+            .set_oup_coverage_threshold(self.oup_coverage_threshold)
+            .set_pass_through_tags(self.pass_through_tags.as_ref())
+            ;
         param
     }
 }
@@ -280,6 +286,7 @@ fn main() {
                 sorted_sbr,
                 sorted_smc,
                 input_filter_params,
+                oup_params,
                 sbr_and_smc_sender,
                 reporter_,
             );

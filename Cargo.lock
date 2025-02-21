@@ -99,7 +99,6 @@ dependencies = [
  "clap 4.5.27",
  "criterion",
  "crossbeam",
- "gskits",
  "indicatif",
  "minimap2",
  "mm2",
@@ -755,9 +754,9 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
 name = "gskits"
-version = "0.11.2"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d7439f3c204aaf84ec72a1772eaa83ef1e9d229504b5e8f4efb63190edfb56d"
+checksum = "69bbd672f3689123231843bec46194cb456e46233ce570769fc8d7c062db5447"
 dependencies = [
  "anyhow",
  "bio 2.0.3",
@@ -1225,9 +1224,9 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.22.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "470dfad6784ee4f4634b32dd554366937c1f7269e09b48e7de38c40913d86bd6"
+checksum = "3d7c34d121ad985de141800a53cc2d55080ac8b45046de2b79ad7d42cebc5cc3"
 dependencies = [
  "anyhow",
  "bio 1.6.0",
