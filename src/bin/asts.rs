@@ -1,8 +1,5 @@
 use std::{
-    collections::HashMap,
-    fs, path,
-    sync::{Arc, Mutex},
-    thread,
+    collections::HashMap, fs, path, str::FromStr, sync::{Arc, Mutex}, thread
 };
 
 use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
@@ -160,8 +157,8 @@ pub struct OupArgs {
     pub oup_coverage_threshold: f32,
 
     /// pass through tags. the value will dump to the result bam.
-    #[arg(long = "pt_tags", value_name = "nn,ar")]
-    pub pass_through_tags: Option<String>,
+    #[arg(long = "pt_tags", default_value_t=String::from_str("dw").unwrap(), value_name = "nn,ar")]
+    pub pass_through_tags: String,
 }
 
 impl OupArgs {
@@ -172,7 +169,7 @@ impl OupArgs {
             .set_discard_supplementary(true)
             .set_oup_identity_threshold(self.oup_identity_threshold)
             .set_oup_coverage_threshold(self.oup_coverage_threshold)
-            .set_pass_through_tags(self.pass_through_tags.as_ref())
+            .set_pass_through_tags(Some(&self.pass_through_tags))
             ;
         param
     }
