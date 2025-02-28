@@ -18,6 +18,7 @@ use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
 
 pub mod reporter;
+pub mod sbr_and_ref_to_cs;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
