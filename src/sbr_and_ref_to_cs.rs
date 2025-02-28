@@ -8,7 +8,7 @@ use std::{
 use crate::SubreadsAndSmc;
 use crate::{align_sbr_to_smc, reporter::Reporter};
 use crossbeam::channel::Sender;
-use minimap2::{Aligner, Built, PresetSet};
+use minimap2::{Aligner, Built, Mapping, PresetSet};
 use mm2::gskits::{
     self,
     ds::ReadInfo,
@@ -25,22 +25,21 @@ use mm2::{
 use rust_htslib::bam::{ext::BamRecordExtensions, Read, Record};
 use tracing;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-fn align_cs_to_ref(cs: &str, ref_aligner: &Aligner<Built>, ref_seq: &str) -> Option<String> {
-    let hits = ref_aligner
-        .map(
-            cs.as_bytes(),
-            false,
-            false,
-            None,
-            Some(&[68719476736]), // 67108864 eqx, 68719476736 secondary
-            None,
-        )
-        .unwrap();
+#[derive(Debug, Default)]
+struct Cs2RefAlnRes {
+    identity: f32,
+    mm: u32,
+    ins: u32,
+    homo_ins: u32,
+    del: u32,
+    homo_del: u32,
+    ref_sub_seq: Option<String>,
+}
 
-    return if hits.len() == 1 {
-        let hit = &hits[0];
+impl Cs2RefAlnRes {
+    fn new(hit: &Mapping, ref_seq: &str) -> Self {
         let target_start = if hit.target_start > 10 {
             hit.target_start - 10
         } else {
@@ -48,14 +47,43 @@ fn align_cs_to_ref(cs: &str, ref_aligner: &Aligner<Built>, ref_seq: &str) -> Opt
         } as usize;
 
         let target_end = (hit.target_end + 10).min(ref_seq.len() as i32) as usize;
+        let ref_sub_seq = Some(ref_seq[target_start..target_end].to_string());
 
-        Some(ref_seq[target_start..target_end].to_string())
+        let identity = MappingExt(hit).identity();
+
+        Self {
+            identity: identity,
+            mm: 0,
+            ins: 0,
+            homo_ins: 0,
+            del: 0,
+            homo_del: 0,
+            ref_sub_seq: ref_sub_seq,
+        }
+    }
+}
+
+fn align_cs_to_ref(cs: &str, ref_aligner: &Aligner<Built>, ref_seq: &str) -> Option<Cs2RefAlnRes> {
+    let hits = ref_aligner
+        .map(
+            cs.as_bytes(),
+            false,
+            false,
+            None,
+            Some(&[67108864, 68719476736]), // 67108864 eqx, 68719476736 secondary
+            None,
+        )
+        .unwrap();
+
+    return if hits.len() == 1 {
+        let hit = &hits[0];
+        Some(Cs2RefAlnRes::new(hit, ref_seq))
     } else {
         None
     };
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct MsaResult {
     pub identity: f32,
     pub mm: u32,
@@ -63,6 +91,42 @@ pub struct MsaResult {
     pub del: u32,
     pub msa_seqs: Vec<String>,
     pub names: Vec<String>,
+}
+
+impl MsaResult {
+    fn extract_error_region(self) -> Self {
+        assert!(self.names[1].starts_with("ref"));
+
+        let smc_aligned = self.msa_seqs[0].as_bytes();
+        let ref_aligned = self.msa_seqs[1].as_bytes();
+
+        let tot_len = smc_aligned.len();
+        let mut regions = vec![];
+        (0..tot_len).for_each(|pos| {
+            if smc_aligned[pos] != ref_aligned[pos] {
+                let start = if pos > 10 { pos - 10 } else { 0 };
+                let end = (pos + 10).min(tot_len);
+                regions.push((start, end));
+            }
+        });
+        let regions = merge_intervals(regions);
+
+        let new_msa_seqs = self
+            .msa_seqs
+            .iter()
+            .map(|ori_str| {
+                regions
+                    .iter()
+                    .map(|&(s, e)| ori_str[s..e].to_string())
+                    .collect::<Vec<_>>()
+                    .join("#")
+            })
+            .collect::<Vec<_>>();
+        Self {
+            msa_seqs: new_msa_seqs,
+            ..self
+        }
+    }
 }
 
 pub fn align_sbr_and_ref_to_cs_worker(
@@ -92,11 +156,20 @@ pub fn align_sbr_and_ref_to_cs_worker(
         let timer = scoped_timer.perform_timing();
         let start = Instant::now();
 
-        let ref_seq = align_cs_to_ref(&subreads_and_smc.smc.seq, ref_aligner, ref_seq);
-        if ref_seq.is_none() {
+        let cs2ref_aln_res = align_cs_to_ref(&subreads_and_smc.smc.seq, ref_aligner, ref_seq);
+        if cs2ref_aln_res.is_none() {
             continue;
         }
-        let ref_read_info = ReadInfo::new_fa_record("ref/-1".to_string(), ref_seq.unwrap());
+        let mut cs2ref_aln_res = cs2ref_aln_res.unwrap();
+
+        if cs2ref_aln_res.identity >= 0.999 {
+            continue;
+        }
+
+        let ref_read_info = ReadInfo::new_fa_record(
+            "ref/-1".to_string(),
+            cs2ref_aln_res.ref_sub_seq.take().unwrap(),
+        );
         subreads_and_smc.subreads.push(ref_read_info);
         subreads_and_smc.subreads.iter_mut().for_each(|read_info| {
             read_info.dw = None;
@@ -155,7 +228,9 @@ pub fn align_sbr_and_ref_to_cs_worker(
         if align_res.is_none() {
             continue;
         }
-        let align_res = align_res.unwrap();
+        let mut align_res = align_res.unwrap();
+        align_res.identity = cs2ref_aln_res.identity;
+        align_res = align_res.extract_error_region();
 
         timer.done_with_cnt(1);
         out_smc += 1;
@@ -316,4 +391,29 @@ fn build_one_record_of_msa(
             result[base_pos + delta] = query[qpos];
         }
     }
+}
+
+fn merge_intervals(intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    if intervals.is_empty() {
+        return vec![];
+    }
+
+    let mut merged = Vec::new();
+    let mut current = intervals[0].clone(); // 初始化为第一个区间
+
+    for interval in intervals.into_iter().skip(1) {
+        if interval.0 <= current.1 {
+            // 如果当前区间的 start 小于等于上一个区间的 end，进行合并
+            current.1 = current.1.max(interval.1); // 更新 end 为两者中的较大值
+        } else {
+            // 没有重叠，保存当前区间，更新 current 为新的区间
+            merged.push(current);
+            current = interval;
+        }
+    }
+
+    // 最后将最后一个区间添加到 merged 中
+    merged.push(current);
+
+    merged
 }

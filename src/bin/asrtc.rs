@@ -39,7 +39,7 @@ pub struct Cli {
     #[arg(long = "threads")]
     pub threads: Option<usize>,
 
-    #[arg(long = "ref_fa")]
+    #[arg(long = "ref-fa")]
     pub ref_fa: String,
 
     // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
@@ -70,7 +70,7 @@ pub struct IoArgs {
     )]
     pub smc: String,
 
-    #[arg(short = 'p', help = "output a file named ${p}.bam")]
+    #[arg(short = 'p', help = "output a file named ${p}.asrtc.txt")]
     pub prefix: String,
 
     #[arg(
@@ -167,9 +167,6 @@ pub struct OupArgs {
     #[arg(long="oupCovT", default_value_t=-1.0, help="remove the record from the result bam file when the coverage < coverage_threshold")]
     pub oup_coverage_threshold: f32,
 
-    /// pass through tags. the value will dump to the result bam.
-    #[arg(long = "pt_tags", default_value_t=String::from_str("dw,ar,cr,nn").unwrap(), value_name = "dw,ar")]
-    pub pass_through_tags: String,
 }
 
 impl OupArgs {
@@ -180,7 +177,7 @@ impl OupArgs {
             .set_discard_supplementary(true)
             .set_oup_identity_threshold(self.oup_identity_threshold)
             .set_oup_coverage_threshold(self.oup_coverage_threshold)
-            .set_pass_through_tags(Some(&self.pass_through_tags));
+            .set_pass_through_tags(None);
         param
     }
 }
@@ -229,8 +226,8 @@ fn main() {
 
     let mut tmp_files = vec![];
     let args = Cli::parse();
-    let o_path = format!("{}.bam", args.io_args.prefix);
-    let log_path = format!("{}.asts.log", args.io_args.prefix);
+    let o_path = format!("{}.asrtc.txt", args.io_args.prefix);
+    let log_path = format!("{}.asrtc.log", args.io_args.prefix);
     let log_file = std::fs::File::create(&log_path).unwrap();
     let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
     tracing_subscriber::fmt::fmt()
@@ -354,12 +351,6 @@ fn main() {
         reporter.lock().unwrap()
     );
 
-    tracing::info!("sorting result bam");
-    sort_by_coordinates(&o_path, None);
-
-    tracing::info!("indexing result bam");
-    samtools_bai(&o_path, true, None).unwrap();
-
     for tmp_file in tmp_files {
         if path::Path::new(&tmp_file).exists() {
             fs::remove_file(&tmp_file).unwrap();
@@ -369,7 +360,7 @@ fn main() {
 }
 
 fn write_msa_result(recv: Receiver<MsaResult>, o_path: &str) {
-    let mut buf_writer = BufWriter::new(fs::File::open(o_path).unwrap());
+    let mut buf_writer = BufWriter::new(fs::File::create(o_path).unwrap());
 
     let pb = pbar::get_spin_pb(
         format!("asctr: writing msa result to {}", o_path),
