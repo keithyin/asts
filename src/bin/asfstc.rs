@@ -9,8 +9,7 @@ use std::{
 };
 
 use asts::{
-    reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
-    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
+    reporter::Reporter, sbr_and_cs_to_cs::align_sbr_and_fake_cs_to_cs_worker, sbr_and_ref_to_cs::{align_sbr_and_ref_to_cs_worker, MsaResult}, subreads_and_smc_generator
 };
 use crossbeam::channel::Receiver;
 use minimap2::{Aligner, Built};
@@ -33,13 +32,10 @@ use tracing_subscriber;
 
 use clap::{self, Args, Parser};
 #[derive(Debug, Parser, Clone)]
-#[command(version, about, long_about="align ref & subreads to cs, then output msa result")]
+#[command(version, about, long_about="align subreads to cs, then output msa result")]
 pub struct Cli {
     #[arg(long = "threads")]
     pub threads: Option<usize>,
-
-    #[arg(long = "ref-fa")]
-    pub ref_fa: String,
 
     // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
     // pub preset: String,
@@ -284,11 +280,7 @@ fn main() {
     let align_params = args.align_args.to_align_params();
     let reporter = Arc::new(Mutex::new(Reporter::default()));
 
-    let (ref_aligner, ref_seq) = build_ref_aligner(&args.ref_fa);
-
     thread::scope(|s| {
-        let ref_aligner = &ref_aligner;
-        let ref_seq = &ref_seq;
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");
 
@@ -324,11 +316,9 @@ fn main() {
             thread::Builder::new()
                 .name(format!("align_sbr_to_smc_worker-{}", idx))
                 .spawn_scoped(s, move || {
-                    align_sbr_and_ref_to_cs_worker(
+                    align_sbr_and_fake_cs_to_cs_worker(
                         sbr_and_smc_recv_,
                         align_res_sender_,
-                        ref_aligner,
-                        ref_seq,
                         target2idx,
                         map_params,
                         align_params,

@@ -94,7 +94,7 @@ pub struct MsaResult {
 }
 
 impl MsaResult {
-    fn extract_error_region(self) -> Self {
+    pub fn extract_error_region(self) -> Self {
         assert!(self.names[1].starts_with("ref"));
 
         let smc_aligned = self.msa_seqs[0].as_bytes();
@@ -255,7 +255,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
     );
 }
 
-fn build_msa_result_from_records(
+pub fn build_msa_result_from_records(
     mut records: Vec<Record>,
     ref_seq: &str,
     ref_name: &str,

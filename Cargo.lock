@@ -93,13 +93,14 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
  "criterion",
  "crossbeam",
  "indicatif",
+ "lazy_static",
  "minimap2",
  "mm2",
  "num_cpus",

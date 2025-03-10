@@ -2,3 +2,4 @@ target
 *aligned.bam*
 *.log
 **/*.pyc
+tmp.txt
