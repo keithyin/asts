@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use crate::{align_sbr_to_smc, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records};
 use crate::{sbr_and_ref_to_cs::MsaResult, SubreadsAndSmc};
 use crossbeam::channel::Sender;
-use mm2::gskits::{ds::ReadInfo, utils::ScopedTimer};
+use mm2::gskits::{ds::ReadInfo, phreq::phreq_list_2_quality, utils::ScopedTimer};
 
 use tracing;
 
@@ -38,11 +38,13 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
         let timer = scoped_timer.perform_timing();
         let start = Instant::now();
 
-        let fake_cs = generate_fake_cs_from_cs(&subreads_and_smc.smc);
+        let pred_q = phreq_list_2_quality(subreads_and_smc.smc.qual.as_ref().unwrap());
+
+        // let fake_cs = generate_fake_cs_from_cs(&subreads_and_smc.smc);
 
         let ref_read_info = ReadInfo::new_fa_record(
             "ref/-1".to_string(),
-            fake_cs,
+            subreads_and_smc.smc.seq.clone(),
         );
         subreads_and_smc.subreads.push(ref_read_info);
         subreads_and_smc.subreads.iter_mut().for_each(|read_info| {
@@ -98,13 +100,14 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
             align_infos,
             &subreads_and_smc.smc.seq,
             &subreads_and_smc.smc.name,
+            subreads_and_smc.smc.qual.as_deref(),
         );
         if align_res.is_none() {
             continue;
         }
         let mut align_res = align_res.unwrap();
-        align_res.identity = 0.0;
-        align_res = align_res.extract_error_region();
+        align_res.identity = pred_q;
+        align_res = align_res.extract_lowq_region();
 
         timer.done_with_cnt(1);
         out_smc += 1;

@@ -95,15 +95,52 @@ pub struct MsaResult {
 
 impl MsaResult {
     pub fn extract_error_region(self) -> Self {
-        assert!(self.names[1].starts_with("ref"));
+        assert!(self.names[2].starts_with("ref"), "{}", self.names[2]);
 
-        let smc_aligned = self.msa_seqs[0].as_bytes();
-        let ref_aligned = self.msa_seqs[1].as_bytes();
+        let smc_aligned = self.msa_seqs[1].as_bytes();
+        let ref_aligned = self.msa_seqs[2].as_bytes();
 
         let tot_len = smc_aligned.len();
         let mut regions = vec![];
         (0..tot_len).for_each(|pos| {
             if smc_aligned[pos] != ref_aligned[pos] {
+                let start = if pos > 10 { pos - 10 } else { 0 };
+                let end = (pos + 10).min(tot_len);
+                regions.push((start, end));
+            }
+        });
+        let regions = merge_intervals(regions);
+
+        let new_msa_seqs = self
+            .msa_seqs
+            .iter()
+            .map(|ori_str| {
+                regions
+                    .iter()
+                    .map(|&(s, e)| ori_str[s..e].to_string())
+                    .collect::<Vec<_>>()
+                    .join("#")
+            })
+            .collect::<Vec<_>>();
+        Self {
+            msa_seqs: new_msa_seqs,
+            ..self
+        }
+    }
+
+    pub fn extract_lowq_region(self) -> Self {
+        assert!(self.names[2].starts_with("ref"), "{}", self.names[2]);
+
+        let qual = self.msa_seqs[0]
+            .as_bytes()
+            .iter()
+            .map(|&v| if v == '-' as u8 { 10 } else { v - '0' as u8 })
+            .collect::<Vec<_>>();
+
+        let tot_len = qual.len();
+        let mut regions = vec![];
+        (0..tot_len).for_each(|pos| {
+            if qual[pos] < 4 {
                 let start = if pos > 10 { pos - 10 } else { 0 };
                 let end = (pos + 10).min(tot_len);
                 regions.push((start, end));
@@ -224,6 +261,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             align_infos,
             &subreads_and_smc.smc.seq,
             &subreads_and_smc.smc.name,
+            subreads_and_smc.smc.qual.as_deref(),
         );
         if align_res.is_none() {
             continue;
@@ -259,6 +297,7 @@ pub fn build_msa_result_from_records(
     mut records: Vec<Record>,
     ref_seq: &str,
     ref_name: &str,
+    qual: Option<&[u8]>,
 ) -> Option<MsaResult> {
     if records.len() == 0 {
         return None;
@@ -308,8 +347,16 @@ pub fn build_msa_result_from_records(
     major_pos_ins_vec.iter().for_each(|(major, _)| {
         anchor_aligned[*major_pos2major_starting_point.get(major).unwrap()] = ref_seq[*major];
     });
-
     let anchor_aligned = String::from_utf8(anchor_aligned).unwrap();
+
+    let mut anchor_qual = vec!['-'; tot_len];
+    if let Some(qual) = qual {
+        major_pos_ins_vec.iter().for_each(|(major, _)| {
+            anchor_qual[*major_pos2major_starting_point.get(major).unwrap()] =
+                ((qual[*major] / 5u8 + 1).min(9) + '0' as u8) as char;
+        });
+    }
+    let anchor_qual = anchor_qual.iter().collect::<String>();
 
     let msa = records
         .iter()
@@ -320,9 +367,9 @@ pub fn build_msa_result_from_records(
         })
         .collect::<Vec<_>>();
 
-    let mut msa_seqs = vec![anchor_aligned];
+    let mut msa_seqs = vec![anchor_qual, anchor_aligned];
     msa_seqs.extend(msa.into_iter());
-    let mut names = vec![ref_name.to_string()];
+    let mut names = vec!["qual".to_string(), ref_name.to_string()];
     names.extend(
         records
             .iter()
