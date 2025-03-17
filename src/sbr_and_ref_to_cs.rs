@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex},
     thread,
     time::Instant,
@@ -8,24 +8,19 @@ use std::{
 use crate::SubreadsAndSmc;
 use crate::{align_sbr_to_smc, reporter::Reporter};
 use crossbeam::channel::Sender;
-use minimap2::{Aligner, Built, Mapping, PresetSet};
+use minimap2::{Aligner, Built, Mapping};
 use mm2::gskits::{
-    self,
     ds::ReadInfo,
     gsbam::{
         bam_record_ext::BamRecordExt, plp_counts_from_records::compute_max_ins_of_each_ref_position,
     },
     utils::ScopedTimer,
 };
-use mm2::{
-    mapping_ext::MappingExt,
-    params::{InputFilterParams, TOverrideAlignerParam},
-    NoMemLeakAligner,
-};
-use rust_htslib::bam::{ext::BamRecordExtensions, Read, Record};
+use mm2::mapping_ext::MappingExt;
+use rust_htslib::bam::{ext::BamRecordExtensions, Record};
 use tracing;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Debug, Default)]
 struct Cs2RefAlnRes {
@@ -91,6 +86,7 @@ pub struct MsaResult {
     pub del: u32,
     pub msa_seqs: Vec<String>,
     pub names: Vec<String>,
+    pub positions: Vec<i32>,
 }
 
 impl MsaResult {
@@ -111,6 +107,21 @@ impl MsaResult {
         });
         let regions = merge_intervals(regions);
 
+        let mut region_positions = regions
+            .iter()
+            .flat_map(|&(s, e)| {
+                self.positions[s..e]
+                    .iter()
+                    .copied()
+                    .chain(vec![-1].into_iter())
+            })
+            .collect::<Vec<_>>();
+        if let Some(last) = region_positions.last().copied() {
+            if last == -1 {
+                region_positions.pop();
+            }
+        }
+
         let new_msa_seqs = self
             .msa_seqs
             .iter()
@@ -122,8 +133,14 @@ impl MsaResult {
                     .join("#")
             })
             .collect::<Vec<_>>();
+
+        if !region_positions.is_empty() {
+            assert!(region_positions.len() == new_msa_seqs[0].len());
+        }
+
         Self {
             msa_seqs: new_msa_seqs,
+            positions: region_positions,
             ..self
         }
     }
@@ -148,6 +165,21 @@ impl MsaResult {
         });
         let regions = merge_intervals(regions);
 
+        let mut region_positions = regions
+            .iter()
+            .flat_map(|&(s, e)| {
+                self.positions[s..e]
+                    .iter()
+                    .copied()
+                    .chain(vec![-1].into_iter())
+            })
+            .collect::<Vec<_>>();
+        if let Some(last) = region_positions.last().copied() {
+            if last == -1 {
+                region_positions.pop();
+            }
+        }
+
         let new_msa_seqs = self
             .msa_seqs
             .iter()
@@ -159,8 +191,14 @@ impl MsaResult {
                     .join("#")
             })
             .collect::<Vec<_>>();
+
+        if !region_positions.is_empty() {
+            assert!(region_positions.len() == new_msa_seqs[0].len());
+        }
+
         Self {
             msa_seqs: new_msa_seqs,
+            positions: region_positions,
             ..self
         }
     }
@@ -343,6 +381,16 @@ pub fn build_msa_result_from_records(
         .zip(major_start_point.into_iter())
         .collect::<HashMap<_, _>>();
 
+    let mut major_positions = vec![-1; tot_len];
+    major_pos_ins_vec.iter().for_each(|&(major, _)| {
+        major_positions[*major_pos2major_starting_point.get(&major).unwrap()] = major as i32
+    });
+    (0..tot_len).for_each(|idx| {
+        if idx > 0 && major_positions[idx] == -1 {
+            major_positions[idx] = major_positions[idx - 1];
+        }
+    });
+
     let mut anchor_aligned = vec!['-' as u8; tot_len];
     major_pos_ins_vec.iter().for_each(|(major, _)| {
         anchor_aligned[*major_pos2major_starting_point.get(major).unwrap()] = ref_seq[*major];
@@ -383,6 +431,7 @@ pub fn build_msa_result_from_records(
         del: 0,
         msa_seqs: msa_seqs,
         names: names,
+        positions: major_positions,
     })
 }
 

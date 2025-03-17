@@ -1,24 +1,14 @@
 use std::{
-    collections::HashMap,
-    fs,
-    io::BufWriter,
-    io::Write,
-    path,
-    sync::{Arc, Mutex},
-    thread,
+    collections::HashMap, fs, io::{BufWriter, Write}, path, str::FromStr, sync::{Arc, Mutex}, thread
 };
 
 use asts::{
-    reporter::Reporter, sbr_and_cs_to_cs::align_sbr_and_fake_cs_to_cs_worker, sbr_and_ref_to_cs::{align_sbr_and_ref_to_cs_worker, MsaResult}, subreads_and_smc_generator
+    reporter::Reporter, sbr_and_cs_to_cs::align_sbr_and_fake_cs_to_cs_worker,
+    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
 };
 use crossbeam::channel::Receiver;
-use minimap2::{Aligner, Built};
 use mm2::gskits::{
-    fastx_reader::{
-        fasta_reader::FastaFileReader,
-        fastx2bam::{fasta2bam, fastq2bam},
-        read_fastx,
-    },
+    fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     pbar::{self, DEFAULT_INTERVAL},
     samtools::sort_by_tag,
 };
@@ -32,7 +22,11 @@ use tracing_subscriber;
 
 use clap::{self, Args, Parser};
 #[derive(Debug, Parser, Clone)]
-#[command(version, about, long_about="align subreads to cs, then output msa result")]
+#[command(
+    version,
+    about,
+    long_about = "align subreads to cs, then output msa result"
+)]
 pub struct Cli {
     #[arg(long = "threads")]
     pub threads: Option<usize>,
@@ -84,9 +78,10 @@ pub struct IoArgs {
 
     #[arg(
         long = "rq-range",
-        help = "0.9:1.1 means 0.9<=rq<=1.1. target rq_range. only valid for target that contains rq field"
+        default_value_t=String::from_str("0.0:0.999").unwrap(),
+        help = "0.0:0.999 means 0.0<=rq<=0.999. target rq_range. only valid for target that contains rq field"
     )]
-    pub rq_range: Option<String>,
+    pub rq_range: String,
 }
 
 impl IoArgs {
@@ -98,11 +93,13 @@ impl IoArgs {
             param
         };
 
-        param = if let Some(ref rq_range_str) = self.rq_range {
-            param.set_rq_range(rq_range_str)
-        } else {
-            param
-        };
+        // param = if let Some(ref rq_range_str) = self.rq_range {
+        //     param.set_rq_range(rq_range_str)
+        // } else {
+        //     param
+        // };
+
+        param = param.set_rq_range(&self.rq_range);
 
         param
     }
@@ -191,21 +188,6 @@ fn build_target_to_idx(smc_bam: &str) -> HashMap<String, (usize, usize)> {
         target2idx.insert(qname, (idx, qlen));
     }
     target2idx
-}
-
-fn build_ref_aligner(ref_fa: &str) -> (Aligner<Built>, String) {
-    let reader = FastaFileReader::new(ref_fa.to_string());
-    let read_infos = read_fastx(reader);
-    assert!(read_infos.len() == 1);
-
-    let aligner = Aligner::builder()
-        .map_ont()
-        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-        .with_sam_out()
-        .with_index_threads(10)
-        .with_seq_and_id(read_infos[0].seq.as_bytes(), read_infos[0].name.as_bytes())
-        .unwrap();
-    (aligner, read_infos[0].seq.clone())
 }
 
 fn main() {

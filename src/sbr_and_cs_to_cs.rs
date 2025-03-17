@@ -1,12 +1,14 @@
+use lazy_static::lazy_static;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{Arc, Mutex},
     thread,
     time::Instant,
 };
-use lazy_static::lazy_static;
 
-use crate::{align_sbr_to_smc, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records};
+use crate::{
+    align_sbr_to_smc, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records,
+};
 use crate::{sbr_and_ref_to_cs::MsaResult, SubreadsAndSmc};
 use crossbeam::channel::Sender;
 use mm2::gskits::{ds::ReadInfo, phreq::phreq_list_2_quality, utils::ScopedTimer};
@@ -39,13 +41,14 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
         let start = Instant::now();
 
         let pred_q = phreq_list_2_quality(subreads_and_smc.smc.qual.as_ref().unwrap());
+        if pred_q > 0.999 {
+            continue;
+        }
 
         // let fake_cs = generate_fake_cs_from_cs(&subreads_and_smc.smc);
 
-        let ref_read_info = ReadInfo::new_fa_record(
-            "ref/-1".to_string(),
-            subreads_and_smc.smc.seq.clone(),
-        );
+        let ref_read_info =
+            ReadInfo::new_fa_record("ref/-1".to_string(), subreads_and_smc.smc.seq.clone());
         subreads_and_smc.subreads.push(ref_read_info);
         subreads_and_smc.subreads.iter_mut().for_each(|read_info| {
             read_info.dw = None;
@@ -141,7 +144,6 @@ lazy_static! {
         m.insert(b'G', b'C');
         m
     };
-
     static ref LOWER10_BASE_MAPPING: HashMap<u8, u8> = {
         let mut m = HashMap::new();
         m.insert(b'A', b'C');
@@ -150,7 +152,6 @@ lazy_static! {
         m.insert(b'G', b'A');
         m
     };
-
     static ref LOWER5_BASE_MAPPING: HashMap<u8, u8> = {
         let mut m = HashMap::new();
         m.insert(b'A', b'G');
@@ -159,26 +160,4 @@ lazy_static! {
         m.insert(b'G', b'T');
         m
     };
-
-}
-
-fn generate_fake_cs_from_cs(read_info: &ReadInfo) -> String {
-    let qual = read_info.qual.as_ref().unwrap();   
-    let seq = read_info.seq.as_bytes();
-
-    let fake_cs = qual.iter().zip(seq).map(|(&q, &s)| {
-        let res_c = if q < 5 {
-            *LOWER5_BASE_MAPPING.get(&s).unwrap()
-        } else if q < 10 {
-            *LOWER10_BASE_MAPPING.get(&s).unwrap()
-        } else if q < 20 {
-            *LOWER20_BASE_MAPPING.get(&s).unwrap()
-        } else {
-            s
-        };
-        res_c
-    }).collect::<Vec<u8>>() ;
-
-    String::from_utf8(fake_cs).unwrap()
-
 }
