@@ -1,5 +1,11 @@
 use std::{
-    collections::HashMap, fs, io::{BufWriter, Write}, path, str::FromStr, sync::{Arc, Mutex}, thread
+    collections::HashMap,
+    fs,
+    io::{BufWriter, Write},
+    path,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    thread,
 };
 
 use asts::{
@@ -107,45 +113,35 @@ impl IoArgs {
 
 #[derive(Debug, Args, Clone, Default)]
 pub struct AlignArgs {
-    #[arg(short = 'm', help = "matching_score>=0, recommend 2")]
-    matching_score: Option<i32>,
+    #[arg(
+        short = 'm',
+        default_value_t = 2,
+        help = "matching_score>=0"
+    )]
+    matching_score: i32,
 
-    #[arg(short = 'M', help = "mismatch_penalty >=0, recommend 4")]
-    mismatch_penalty: Option<i32>,
+    #[arg(
+        short = 'M',
+        default_value_t = 5,
+        help = "mismatch_penalty >=0"
+    )]
+    mismatch_penalty: i32,
 
-    #[arg(short = 'o', help = "gap_open_penalty >=0, recommend 4,24")]
-    gap_open_penalty: Option<String>,
+    #[arg(short = 'o', default_value_t=String::from_str("2,24").unwrap() ,help = "gap_open_penalty >=0")]
+    gap_open_penalty: String,
 
-    #[arg(short = 'e', help = "gap_extension_penalty >=0, recommend 2,1")]
-    gap_extension_penalty: Option<String>,
+    #[arg(short = 'e', default_value_t=String::from_str("1,0").unwrap(), help = "gap_extension_penalty >=0")]
+    gap_extension_penalty: String,
 }
 
 impl AlignArgs {
     pub fn to_align_params(&self) -> mm2::params::AlignParams {
         let mut param = mm2::params::AlignParams::new();
-        param = if let Some(ms) = self.matching_score {
-            param.set_m_score(ms)
-        } else {
-            param
-        };
-
-        param = if let Some(mms) = self.mismatch_penalty {
-            param.set_mm_score(mms)
-        } else {
-            param
-        };
-
-        param = if let Some(ref go) = self.gap_open_penalty {
-            param.set_gap_open_penalty(go.to_string())
-        } else {
-            param
-        };
-
-        param = if let Some(ref ge) = self.gap_extension_penalty {
-            param.set_gap_extension_penalty(ge.to_string())
-        } else {
-            param
-        };
+        param = param
+            .set_m_score(self.matching_score)
+            .set_mm_score(self.mismatch_penalty)
+            .set_gap_open_penalty(self.gap_open_penalty.clone())
+            .set_gap_extension_penalty(self.gap_extension_penalty.clone());
 
         param
     }
