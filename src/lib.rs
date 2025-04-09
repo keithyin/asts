@@ -422,7 +422,7 @@ pub fn draw_aligned_seq(
 
 #[cfg(test)]
 mod tests {
-    use gskits::fastx_reader::fasta_reader::FastaFileReader;
+    use mm2::gskits::fastx_reader::fasta_reader::FastaFileReader;
     use mm2::{build_bam_record_from_mapping, NoMemLeakAligner};
 
     use super::*;

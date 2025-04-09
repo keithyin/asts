@@ -1,15 +1,13 @@
 use std::{
-    collections::HashMap, fs, path, str::FromStr, sync::{Arc, Mutex}, thread
+    collections::HashMap, fs, path, str::FromStr, sync::{Arc, Mutex}, thread, time::Duration
 };
 
 use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
-use mm2::gskits::{
-    fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
-    samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
+use mm2::gskits::{fastx_reader::fastx2bam::{fasta2bam, fastq2bam}, samtools::{samtools_bai, sort_by_coordinates, sort_by_tag}
 };
 use mm2::params::{InputFilterParams, OupParams};
 use rust_htslib::bam::Read;
-
+use gskits;
 use time;
 use tracing_subscriber;
 
@@ -213,6 +211,9 @@ fn main() {
         .with_ansi(false)
         .with_writer(non_blocking)
         .init();
+
+    let _monito_guard = gskits::sys_monitor::SysMon::new(Duration::from_secs(30), "asts".to_string());
+    _monito_guard.start_monitor(None, None);
 
     let smc_fname = if args.io_args.smc.ends_with(".bam") {
         args.io_args.smc.clone()
