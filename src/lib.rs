@@ -8,17 +8,15 @@ use std::{
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, PresetSet};
 use mm2::gskits::{self, utils::ScopedTimer};
-use mm2::{
-    mapping_ext::MappingExt,
-    params::{InputFilterParams, TOverrideAlignerParam},
-    NoMemLeakAligner,
-};
+use mm2::{mapping_ext::MappingExt, NoMemLeakAligner};
+use params::{AlignParams, InputFilterParams, MapParams, OupParams, TOverrideAlignerParam};
 use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
 
 pub mod mapping2record;
+pub mod params;
 pub mod read_info;
 pub mod reporter;
 pub mod sbr_and_cs_to_cs;
@@ -71,7 +69,7 @@ pub fn subreads_and_smc_generator(
     sorted_sbr_bam: &str,
     sorted_smc_bam: &str,
     input_filter_params: &InputFilterParams,
-    oup_params: &mm2::params::OupParams,
+    oup_params: &OupParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
     reporter: Arc<Mutex<Reporter>>,
 ) {
@@ -162,9 +160,9 @@ pub fn align_sbr_to_smc_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<mm2::AlignResult>,
     target_idx: &HashMap<String, (usize, usize)>,
-    map_params: &mm2::params::MapParams,
-    align_params: &mm2::params::AlignParams,
-    oup_params: &mm2::params::OupParams,
+    map_params: &params::MapParams,
+    align_params: &params::AlignParams,
+    oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();
@@ -255,9 +253,9 @@ pub fn align_sbr_to_smc(
     subreads_and_smc: &SubreadsAndSmc,
     sbr_indices: Vec<usize>,
     target_idx: &HashMap<String, (usize, usize)>,
-    map_params: &mm2::params::MapParams,
-    align_params: &mm2::params::AlignParams,
-    oup_params: &mm2::params::OupParams,
+    map_params: &MapParams,
+    align_params: &AlignParams,
+    oup_params: &OupParams,
     fallback: bool,
 ) -> (Vec<BamRecord>, Vec<usize>) {
     let aligner = build_asts_aligner(
@@ -327,8 +325,8 @@ pub fn align_sbr_to_smc(
 fn build_asts_aligner(
     short_insert: bool,
     fallback: bool,
-    map_params: &mm2::params::MapParams,
-    align_params: &mm2::params::AlignParams,
+    map_params: &MapParams,
+    align_params: &AlignParams,
 ) -> Aligner<PresetSet> {
     let mut aligner = Aligner::builder()
         .map_ont()
@@ -458,9 +456,9 @@ mod tests {
             &subreads_and_smc,
             (0..subreads_and_smc.subreads.len()).collect(),
             &target2idx,
-            &mm2::params::MapParams::default(),
-            &mm2::params::AlignParams::default(),
-            &mm2::params::OupParams::default(),
+            &params::MapParams::default(),
+            &params::AlignParams::default(),
+            &params::OupParams::default(),
             false,
         );
         for record in records {
@@ -542,8 +540,8 @@ mod tests {
         let aligner = build_asts_aligner(
             true,
             false,
-            &mm2::params::MapParams::default(),
-            &mm2::params::AlignParams::default(),
+            &params::MapParams::default(),
+            &params::AlignParams::default(),
         );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
@@ -551,8 +549,8 @@ mod tests {
         let aligner = build_asts_aligner(
             false,
             false,
-            &mm2::params::MapParams::default(),
-            &mm2::params::AlignParams::default(),
+            &params::MapParams::default(),
+            &params::AlignParams::default(),
         );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
@@ -563,8 +561,8 @@ mod tests {
         let aligner = build_asts_aligner(
             true,
             false,
-            &mm2::params::MapParams::default(),
-            &mm2::params::AlignParams::default(),
+            &params::MapParams::default(),
+            &params::AlignParams::default(),
         );
         println!("{:?}", aligner.idxopt);
         println!("{:?}", aligner.mapopt);
@@ -592,8 +590,8 @@ AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCAC
         let aligner = build_asts_aligner(
             false,
             false,
-            &mm2::params::MapParams::default(),
-            &mm2::params::AlignParams::default(),
+            &params::MapParams::default(),
+            &params::AlignParams::default(),
         );
         let aligner = aligner
             .with_seq_and_id(icing_reads.as_bytes(), b"icing")

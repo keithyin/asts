@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use crate::SubreadsAndSmc;
+use crate::{params, SubreadsAndSmc};
 use crate::{align_sbr_to_smc, reporter::Reporter};
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, Built, Mapping};
@@ -209,9 +209,9 @@ pub fn align_sbr_and_ref_to_cs_worker(
     ref_aligner: &Aligner<Built>,
     ref_seq: &str,
     target_idx: &HashMap<String, (usize, usize)>,
-    map_params: &mm2::params::MapParams,
-    align_params: &mm2::params::AlignParams,
-    oup_params: &mm2::params::OupParams,
+    map_params: &params::MapParams,
+    align_params: &params::AlignParams,
+    oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();

@@ -18,7 +18,7 @@ use mm2::gskits::{
     pbar::{self, DEFAULT_INTERVAL},
     samtools::sort_by_tag,
 };
-use mm2::params::{InputFilterParams, OupParams};
+use asts::params::{InputFilterParams, OupParams, AlignParams, MapParams};
 use rust_htslib::bam::Read;
 
 use time;
@@ -135,8 +135,8 @@ pub struct AlignArgs {
 }
 
 impl AlignArgs {
-    pub fn to_align_params(&self) -> mm2::params::AlignParams {
-        let mut param = mm2::params::AlignParams::new();
+    pub fn to_align_params(&self) -> AlignParams {
+        let mut param = AlignParams::new();
         param = param
             .set_m_score(self.matching_score)
             .set_mm_score(self.mismatch_penalty)
@@ -254,7 +254,7 @@ fn main() {
     let oup_params = args.oup_args.to_oup_params();
     let input_filter_params = args.io_args.to_input_filter_params();
 
-    let map_params = mm2::params::MapParams::default();
+    let map_params = MapParams::default();
     let align_params = args.align_args.to_align_params();
     let reporter = Arc::new(Mutex::new(Reporter::default()));
 

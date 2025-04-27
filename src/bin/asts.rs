@@ -5,7 +5,7 @@ use std::{
 use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
 use mm2::gskits::{fastx_reader::fastx2bam::{fasta2bam, fastq2bam}, samtools::{samtools_bai, sort_by_coordinates, sort_by_tag}
 };
-use mm2::params::{InputFilterParams, OupParams};
+use asts::params::{InputFilterParams, OupParams, AlignParams, MapParams};
 use rust_htslib::bam::Read;
 use gskits;
 use time;
@@ -116,8 +116,8 @@ pub struct AlignArgs {
 }
 
 impl AlignArgs {
-    pub fn to_align_params(&self) -> mm2::params::AlignParams {
-        let mut param = mm2::params::AlignParams::new();
+    pub fn to_align_params(&self) -> AlignParams {
+        let mut param = AlignParams::new();
         param = if let Some(ms) = self.matching_score {
             param.set_m_score(ms)
         } else {
@@ -261,7 +261,7 @@ fn main() {
     let oup_params = args.oup_args.to_oup_params();
     let input_filter_params = args.io_args.to_input_filter_params();
 
-    let map_params = mm2::params::MapParams::default();
+    let map_params = MapParams::default();
     let align_params = args.align_args.to_align_params();
     let reporter = Arc::new(Mutex::new(Reporter::default()));
     thread::scope(|s| {
@@ -315,11 +315,19 @@ fn main() {
         drop(sbr_and_smc_recv);
         drop(align_res_sender);
 
+        let mm2_oup_params = mm2::params::OupParams{
+            discard_secondary: oup_params.discard_secondary,
+            discard_supplementary: oup_params.discard_supplementary,
+            oup_identity_threshold: oup_params.oup_identity_threshold,
+            oup_coverage_threshold: oup_params.oup_coverage_threshold,
+            discard_multi_align_reads: oup_params.discard_multi_align_reads,
+            pass_through_tags: oup_params.pass_through_tags.clone(),
+        };
         mm2::bam_writer::write_bam_worker(
             align_res_recv,
             target2idx,
             &o_path,
-            oup_params,
+            &mm2_oup_params,
             "asts",
             env!("CARGO_PKG_VERSION"),
             true,

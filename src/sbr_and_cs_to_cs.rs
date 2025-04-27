@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    align_sbr_to_smc, read_info::ReadInfo, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records
+    align_sbr_to_smc, params, read_info::ReadInfo, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records
 };
 use crate::{sbr_and_ref_to_cs::MsaResult, SubreadsAndSmc};
 use crossbeam::channel::Sender;
@@ -19,9 +19,9 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<MsaResult>,
     target_idx: &HashMap<String, (usize, usize)>,
-    map_params: &mm2::params::MapParams,
-    align_params: &mm2::params::AlignParams,
-    oup_params: &mm2::params::OupParams,
+    map_params: &params::MapParams,
+    align_params: &params::AlignParams,
+    oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();
