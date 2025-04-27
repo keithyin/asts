@@ -14,6 +14,7 @@ use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
+pub use mm2;
 
 pub mod mapping2record;
 pub mod params;
