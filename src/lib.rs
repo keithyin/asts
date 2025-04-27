@@ -6,20 +6,23 @@ use std::{
 };
 
 use crossbeam::channel::Sender;
-use mm2::gskits::{self, ds::ReadInfo, utils::ScopedTimer};
 use minimap2::{Aligner, PresetSet};
+use mm2::gskits::{self, utils::ScopedTimer};
 use mm2::{
     mapping_ext::MappingExt,
     params::{InputFilterParams, TOverrideAlignerParam},
     NoMemLeakAligner,
 };
+use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
 
+pub mod mapping2record;
+pub mod read_info;
 pub mod reporter;
-pub mod sbr_and_ref_to_cs;
 pub mod sbr_and_cs_to_cs;
+pub mod sbr_and_ref_to_cs;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
@@ -40,14 +43,19 @@ impl SubreadsAndSmc {
         }
     }
 
-    pub fn add_subread(&mut self, record: &rust_htslib::bam::Record, tags: &HashSet<String>) -> bool {
+    pub fn add_subread(
+        &mut self,
+        record: &rust_htslib::bam::Record,
+        tags: &HashSet<String>,
+    ) -> bool {
         let sbr_len = record.seq_len() as f64;
         let smc_len = self.smc_len as f64;
         let max_len = smc_len * 3.0;
         let min_len = smc_len * 0.0;
 
         if sbr_len > min_len && sbr_len < max_len {
-            self.subreads.push(ReadInfo::from_bam_record(record, None, tags));
+            self.subreads
+                .push(ReadInfo::from_bam_record(record, None, tags));
             true
         } else {
             false
@@ -299,7 +307,8 @@ pub fn align_sbr_to_smc(
             }
 
             if hit.is_primary && !hit.is_supplementary {
-                let bam_record = mm2::build_bam_record_from_mapping(&hit, subread, target_idx);
+                let bam_record =
+                    mapping2record::build_bam_record_from_mapping(&hit, subread, target_idx);
                 bam_records.push(bam_record);
                 break;
             }
@@ -423,7 +432,9 @@ pub fn draw_aligned_seq(
 #[cfg(test)]
 mod tests {
     use mm2::gskits::fastx_reader::fasta_reader::FastaFileReader;
-    use mm2::{build_bam_record_from_mapping, NoMemLeakAligner};
+    use mm2::NoMemLeakAligner;
+
+    use crate::mapping2record::build_bam_record_from_mapping;
 
     use super::*;
 

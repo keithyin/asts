@@ -7,11 +7,11 @@ use std::{
 };
 
 use crate::{
-    align_sbr_to_smc, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records,
+    align_sbr_to_smc, read_info::ReadInfo, reporter::Reporter, sbr_and_ref_to_cs::build_msa_result_from_records
 };
 use crate::{sbr_and_ref_to_cs::MsaResult, SubreadsAndSmc};
 use crossbeam::channel::Sender;
-use mm2::gskits::{ds::ReadInfo, phreq::phreq_list_2_quality, utils::ScopedTimer};
+use mm2::gskits::{phreq::phreq_list_2_quality, utils::ScopedTimer};
 
 use tracing;
 

@@ -10,7 +10,6 @@ use crate::{align_sbr_to_smc, reporter::Reporter};
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, Built, Mapping};
 use mm2::gskits::{
-    ds::ReadInfo,
     gsbam::{
         bam_record_ext::BamRecordExt, plp_counts_from_records::compute_max_ins_of_each_ref_position,
     },
@@ -241,7 +240,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             continue;
         }
 
-        let ref_read_info = ReadInfo::new_fa_record(
+        let ref_read_info = crate::read_info::ReadInfo::new_fa_record(
             "ref/-1".to_string(),
             cs2ref_aln_res.ref_sub_seq.take().unwrap(),
         );
