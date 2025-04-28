@@ -1,12 +1,10 @@
 use std::{
-    collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
-    thread,
-    time::Instant,
+    collections::{HashMap, HashSet}, hash::Hash, sync::{Arc, Mutex}, thread, time::Instant
 };
 
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, PresetSet};
+pub use mm2;
 use mm2::gskits::{self, utils::ScopedTimer};
 use mm2::{mapping_ext::MappingExt, NoMemLeakAligner};
 use params::{AlignParams, InputFilterParams, MapParams, OupParams, TOverrideAlignerParam};
@@ -14,7 +12,6 @@ use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
-pub use mm2;
 
 pub mod mapping2record;
 pub mod params;
@@ -157,15 +154,17 @@ pub fn subreads_and_smc_generator(
     );
 }
 
-pub fn align_sbr_to_smc_worker(
+pub fn align_sbr_to_smc_worker<T>(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<mm2::AlignResult>,
-    target_idx: &HashMap<String, (usize, usize)>,
+    target_idx: &HashMap<T, (usize, usize)>,
     map_params: &params::MapParams,
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
-) {
+) where
+    T: std::borrow::Borrow<str> + Eq + Hash,
+{
     let mut scoped_timer = ScopedTimer::new();
 
     let mut max_time = 0;
@@ -250,15 +249,18 @@ pub fn align_sbr_to_smc_worker(
     );
 }
 
-pub fn align_sbr_to_smc(
+pub fn align_sbr_to_smc<T>(
     subreads_and_smc: &SubreadsAndSmc,
     sbr_indices: Vec<usize>,
-    target_idx: &HashMap<String, (usize, usize)>,
+    target_idx: &HashMap<T, (usize, usize)>,
     map_params: &MapParams,
     align_params: &AlignParams,
     oup_params: &OupParams,
     fallback: bool,
-) -> (Vec<BamRecord>, Vec<usize>) {
+) -> (Vec<BamRecord>, Vec<usize>)
+where
+    T: std::borrow::Borrow<str> + Eq + Hash,
+{
     let aligner = build_asts_aligner(
         subreads_and_smc.smc.seq.len() < 200,
         fallback,

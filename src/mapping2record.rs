@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, hash::Hash};
 
 use gskits::dna::reverse_complement;
 
@@ -12,11 +12,14 @@ pub type BamRecord = rust_htslib::bam::record::Record;
 pub type BamWriter = rust_htslib::bam::Writer;
 pub type BamReader = rust_htslib::bam::Reader;
 
-pub fn build_bam_record_from_mapping(
+pub fn build_bam_record_from_mapping<T>(
     hit: &minimap2::Mapping,
     query_record: &ReadInfo,
-    target_idx: &HashMap<String, (usize, usize)>,
-) -> BamRecord {
+    target_idx: &HashMap<T, (usize, usize)>,
+) -> BamRecord
+where
+    T: std::borrow::Borrow<str> + Eq + Hash,
+{
     // println!("{:?}", hit);
 
     let mut bam_record = BamRecord::new();
