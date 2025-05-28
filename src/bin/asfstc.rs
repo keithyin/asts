@@ -52,6 +52,13 @@ pub struct Cli {
 
     #[command(flatten)]
     pub oup_args: OupArgs,
+
+    #[arg(long="maxReadQuality", default_value_t=0.999)]
+    pub max_rq: f32,
+
+    #[arg(long="lowBasePhreq", default_value_t=20)]
+    pub low_base_phreq: u8,
+
 }
 
 #[derive(Debug, Args, Clone)]
@@ -286,6 +293,8 @@ fn main() {
 
         let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
+        let max_rq = args.max_rq;
+        let low_base_phreq = args.low_base_phreq;
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
@@ -302,6 +311,8 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
+                        max_rq,
+                        Some(low_base_phreq / 5)
                     )
                 })
                 .unwrap();

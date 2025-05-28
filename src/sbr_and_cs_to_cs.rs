@@ -23,6 +23,8 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
+    max_rq: f32,
+    low_q: Option<u8>
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -41,7 +43,7 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
         let start = Instant::now();
 
         let pred_q = phreq_list_2_quality(subreads_and_smc.smc.qual.as_ref().unwrap());
-        if pred_q > 0.999 {
+        if pred_q > max_rq {
             continue;
         }
 
@@ -104,6 +106,7 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
             &subreads_and_smc.smc.seq,
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
+            low_q
         );
         if align_res.is_none() {
             continue;

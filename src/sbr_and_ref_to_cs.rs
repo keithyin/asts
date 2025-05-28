@@ -86,6 +86,7 @@ pub struct MsaResult {
     pub msa_seqs: Vec<String>,
     pub names: Vec<String>,
     pub positions: Vec<i32>,
+    pub low_q: Option<u8>
 }
 
 impl MsaResult {
@@ -156,7 +157,7 @@ impl MsaResult {
         let tot_len = qual.len();
         let mut regions = vec![];
         (0..tot_len).for_each(|pos| {
-            if qual[pos] < 4 {
+            if qual[pos] < self.low_q.unwrap_or(10) {
                 let start = if pos > 10 { pos - 10 } else { 0 };
                 let end = (pos + 10).min(tot_len);
                 regions.push((start, end));
@@ -299,6 +300,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             &subreads_and_smc.smc.seq,
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
+            None
         );
         if align_res.is_none() {
             continue;
@@ -335,6 +337,7 @@ pub fn build_msa_result_from_records(
     ref_seq: &str,
     ref_name: &str,
     qual: Option<&[u8]>,
+    low_q: Option<u8>
 ) -> Option<MsaResult> {
     if records.len() == 0 {
         return None;
@@ -431,6 +434,7 @@ pub fn build_msa_result_from_records(
         msa_seqs: msa_seqs,
         names: names,
         positions: major_positions,
+        low_q: low_q
     })
 }
 
