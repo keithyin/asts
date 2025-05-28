@@ -492,11 +492,12 @@ fn build_one_record_of_msa(
     }
 }
 
-fn merge_intervals(intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+fn merge_intervals(mut intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     if intervals.is_empty() {
         return vec![];
     }
-
+    intervals.sort_by_key(|item| item.0);
+    
     let mut merged = Vec::new();
     let mut current = intervals[0].clone(); // 初始化为第一个区间
 
@@ -515,4 +516,16 @@ fn merge_intervals(intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     merged.push(current);
 
     merged
+}
+
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn merge_intervals() {
+
+
+
+    }
 }
