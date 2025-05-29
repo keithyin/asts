@@ -14,6 +14,7 @@ pub trait TOverrideAlignerParam {
 pub struct InputFilterParams {
     pub np_range: Option<Range<i32>>,
     pub rq_range: Option<Range<f32>>,
+    pub ch_idx: Option<usize>,
 }
 
 impl InputFilterParams {
@@ -28,6 +29,11 @@ impl InputFilterParams {
 
     pub fn set_rq_range(mut self, rq_range_str: &str) -> Self {
         self.rq_range = Some(Range::<f32>::new(rq_range_str));
+        self
+    }
+
+    pub fn set_ch_idx(mut self, ch_idx: Option<usize>) -> Self {
+        self.ch_idx = ch_idx;
         self
     }
 
@@ -48,6 +54,14 @@ impl InputFilterParams {
                     return false;
                 }
             }
+        }
+
+        if let Some(ch_idx) = self.ch_idx {
+            return record_ext
+                .get_ch()
+                .map(|v| v as usize)
+                .unwrap_or(usize::MAX)
+                == ch_idx;
         }
 
         true
@@ -167,7 +181,7 @@ pub struct OupParams {
     pub oup_identity_threshold: f32,
     pub oup_coverage_threshold: f32,
     pub discard_multi_align_reads: bool,
-    pub pass_through_tags: HashSet<String>, 
+    pub pass_through_tags: HashSet<String>,
 }
 
 impl Default for OupParams {
@@ -223,7 +237,8 @@ impl OupParams {
 
     pub fn set_pass_through_tags(mut self, tags: Option<&String>) -> Self {
         if let Some(tags) = tags {
-            self.pass_through_tags = tags.trim()
+            self.pass_through_tags = tags
+                .trim()
                 .split(",")
                 .map(|v| v.to_string())
                 .collect::<HashSet<_>>();

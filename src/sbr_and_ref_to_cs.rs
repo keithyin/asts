@@ -497,7 +497,7 @@ fn merge_intervals(mut intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
         return vec![];
     }
     intervals.sort_by_key(|item| item.0);
-    
+
     let mut merged = Vec::new();
     let mut current = intervals[0].clone(); // 初始化为第一个区间
 
@@ -524,7 +524,8 @@ mod test {
 
     #[test]
     fn merge_intervals() {
-
+        let intervals = vec![(0, 65), (64, 146), (145, 355)];
+        println!("{:?}", super::merge_intervals(intervals));
 
 
     }

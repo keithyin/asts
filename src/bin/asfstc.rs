@@ -113,6 +113,7 @@ impl IoArgs {
         // };
 
         param = param.set_rq_range(&self.rq_range);
+        param = param.set_ch_idx(self.channel_idx);
 
         param
     }
