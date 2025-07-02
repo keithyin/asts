@@ -3,3 +3,5 @@ target
 *.log
 **/*.pyc
 tmp.txt
+*.txt
+*.log

@@ -10,7 +10,7 @@ pub trait TOverrideAlignerParam {
     fn modify_aligner(&self, aligner: &mut Aligner<PresetSet>);
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct InputFilterParams {
     pub np_range: Option<Range<i32>>,
     pub rq_range: Option<Range<f32>>,

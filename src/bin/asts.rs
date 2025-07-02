@@ -1,13 +1,20 @@
 use std::{
-    collections::HashMap, fs, path, str::FromStr, sync::{Arc, Mutex}, thread, time::Duration
+    collections::HashMap,
+    fs, path,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
+use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
 use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
-use mm2::gskits::{fastx_reader::fastx2bam::{fasta2bam, fastq2bam}, samtools::{samtools_bai, sort_by_coordinates, sort_by_tag}
-};
-use asts::params::{InputFilterParams, OupParams, AlignParams, MapParams};
-use rust_htslib::bam::Read;
 use gskits;
+use mm2::gskits::{
+    fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
+    samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
+};
+use rust_htslib::bam::Read;
 use time;
 use tracing_subscriber;
 
@@ -19,17 +26,9 @@ use clap::{self, Args, Parser};
 pub struct Cli {
     #[arg(long = "threads")]
     pub threads: Option<usize>,
-
-    // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
-    // pub preset: String,
     #[command(flatten)]
     pub io_args: IoArgs,
 
-    // #[command(flatten)]
-    // pub index_args: cli::IndexArgs,
-
-    // #[command(flatten)]
-    // pub map_args: cli::MapArgs,
     #[command(flatten)]
     pub align_args: AlignArgs,
 
@@ -102,45 +101,27 @@ impl IoArgs {
 
 #[derive(Debug, Args, Clone, Default)]
 pub struct AlignArgs {
-    #[arg(short = 'm', help = "matching_score>=0, recommend 2")]
-    matching_score: Option<i32>,
+    #[arg(short = 'm', default_value_t = 2, help = "matching_score>=0")]
+    matching_score: i32,
 
-    #[arg(short = 'M', help = "mismatch_penalty >=0, recommend 4")]
-    mismatch_penalty: Option<i32>,
+    #[arg(short = 'M', default_value_t = 5, help = "mismatch_penalty >=0")]
+    mismatch_penalty: i32,
 
-    #[arg(short = 'o', help = "gap_open_penalty >=0, recommend 4,24")]
-    gap_open_penalty: Option<String>,
+    #[arg(short = 'o', default_value_t=String::from_str("2,24").unwrap() ,help = "gap_open_penalty >=0")]
+    gap_open_penalty: String,
 
-    #[arg(short = 'e', help = "gap_extension_penalty >=0, recommend 2,1")]
-    gap_extension_penalty: Option<String>,
+    #[arg(short = 'e', default_value_t=String::from_str("1,0").unwrap(), help = "gap_extension_penalty >=0")]
+    gap_extension_penalty: String,
 }
 
 impl AlignArgs {
     pub fn to_align_params(&self) -> AlignParams {
         let mut param = AlignParams::new();
-        param = if let Some(ms) = self.matching_score {
-            param.set_m_score(ms)
-        } else {
-            param
-        };
-
-        param = if let Some(mms) = self.mismatch_penalty {
-            param.set_mm_score(mms)
-        } else {
-            param
-        };
-
-        param = if let Some(ref go) = self.gap_open_penalty {
-            param.set_gap_open_penalty(go.to_string())
-        } else {
-            param
-        };
-
-        param = if let Some(ref ge) = self.gap_extension_penalty {
-            param.set_gap_extension_penalty(ge.to_string())
-        } else {
-            param
-        };
+        param = param
+            .set_m_score(self.matching_score)
+            .set_mm_score(self.mismatch_penalty)
+            .set_gap_open_penalty(self.gap_open_penalty.clone())
+            .set_gap_extension_penalty(self.gap_extension_penalty.clone());
 
         param
     }
@@ -155,7 +136,7 @@ pub struct OupArgs {
     pub oup_coverage_threshold: f32,
 
     /// pass through tags. the value will dump to the result bam.
-    #[arg(long = "pt_tags", default_value_t=String::from_str("dw,ar,cr,nn,wd,sd,sp").unwrap(), value_name = "dw,ar")]
+    #[arg(long = "ptTags", default_value_t=String::from_str("dw,ar,cr,nn,wd,sd,sp").unwrap(), value_name = "dw,ar")]
     pub pass_through_tags: String,
 }
 
@@ -167,8 +148,7 @@ impl OupArgs {
             .set_discard_supplementary(true)
             .set_oup_identity_threshold(self.oup_identity_threshold)
             .set_oup_coverage_threshold(self.oup_coverage_threshold)
-            .set_pass_through_tags(Some(&self.pass_through_tags))
-            ;
+            .set_pass_through_tags(Some(&self.pass_through_tags));
         param
     }
 }
@@ -212,7 +192,8 @@ fn main() {
         .with_writer(non_blocking)
         .init();
 
-    let _monito_guard = gskits::sys_monitor::SysMon::new(Duration::from_secs(30), "asts".to_string());
+    let _monito_guard =
+        gskits::sys_monitor::SysMon::new(Duration::from_secs(30), "asts".to_string());
     _monito_guard.start_monitor(None, None);
 
     let smc_fname = if args.io_args.smc.ends_with(".bam") {
@@ -315,7 +296,7 @@ fn main() {
         drop(sbr_and_smc_recv);
         drop(align_res_sender);
 
-        let mm2_oup_params = mm2::params::OupParams{
+        let mm2_oup_params = mm2::params::OupParams {
             discard_secondary: oup_params.discard_secondary,
             discard_supplementary: oup_params.discard_supplementary,
             oup_identity_threshold: oup_params.oup_identity_threshold,

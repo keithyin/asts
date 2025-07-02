@@ -1,5 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet}, hash::Hash, sync::{Arc, Mutex}, thread, time::Instant
+    collections::{HashMap, HashSet},
+    hash::Hash,
+    sync::{Arc, Mutex},
+    thread,
+    time::Instant,
 };
 
 use crossbeam::channel::Sender;
@@ -71,16 +75,16 @@ pub fn subreads_and_smc_generator(
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
     reporter: Arc<Mutex<Reporter>>,
 ) {
+    tracing::info!("{input_filter_params:?}");
+
     let n_threads = 2;
     let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
     smc_bam_reader.set_threads(n_threads).unwrap();
     let mut subreads_bam_reader = rust_htslib::bam::Reader::from_path(sorted_sbr_bam).unwrap();
     subreads_bam_reader.set_threads(n_threads).unwrap();
 
-    let mut smc_records = smc_bam_reader.records();
     let mut subreads_records = subreads_bam_reader.records();
 
-    let mut smc_record_opt = smc_records.next();
     let mut sbr_record_opt = subreads_records.next();
 
     let mut scoped_timer = ScopedTimer::new();
@@ -90,55 +94,52 @@ pub fn subreads_and_smc_generator(
     let mut sbr_inp_cnt = 0;
     let mut sbr_filter_by_length = 0;
 
-    loop {
-        if smc_record_opt.is_none() {
+    for smc_record in smc_bam_reader.records() {
+        let smc_record = smc_record.unwrap();
+
+        if sbr_record_opt.is_none() {
+            tracing::info!("sbr_record_opt is none. break");
             break;
         }
 
-        let smc_record = smc_record_opt.unwrap().unwrap();
-
         if !input_filter_params.valid(&smc_record) {
-            smc_record_opt = smc_records.next();
             continue;
         }
 
         let mut subreads_and_smc = SubreadsAndSmc::new(&smc_record);
         let smc = gskits::gsbam::bam_record_ext::BamRecordExt::new(&smc_record);
 
-        let mut found = false;
         loop {
             if sbr_record_opt.is_none() {
+                tracing::info!("sbr_record_opt is none. break");
                 break;
             }
 
             let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
-            let sbr = gskits::gsbam::bam_record_ext::BamRecordExt::new(sbr);
-            if sbr.get_ch().unwrap() != smc.get_ch().unwrap() {
-                if found {
-                    break;
-                }
-                sbr_record_opt = subreads_records.next();
-                continue;
+            let sbr_ext = gskits::gsbam::bam_record_ext::BamRecordExt::new(sbr);
+
+            if sbr_ext.get_ch().unwrap() > smc.get_ch().unwrap() {
+                break;
             }
 
-            found = true;
-            let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
-            sbr_inp_cnt += 1;
-            if !subreads_and_smc.add_subread(sbr, &oup_params.pass_through_tags) {
-                sbr_filter_by_length += 1;
+            if sbr_ext.get_ch().unwrap() == smc.get_ch().unwrap() {
+                if !subreads_and_smc.add_subread(sbr, &oup_params.pass_through_tags) {
+                    sbr_filter_by_length += 1;
+                }
             }
 
             sbr_record_opt = subreads_records.next();
+        }
+
+        if subreads_and_smc.subreads.is_empty() {
+            tracing::warn!("no subreads for {}", subreads_and_smc.smc.name);
+            continue;
         }
 
         timer.done_with_cnt(1);
         cnt += 1;
         sender.send(subreads_and_smc).unwrap();
         timer = scoped_timer.perform_timing();
-        if sbr_record_opt.is_none() {
-            break;
-        }
-        smc_record_opt = smc_records.next();
     }
 
     {

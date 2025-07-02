@@ -403,7 +403,7 @@ pub fn build_msa_result_from_records(
     if let Some(qual) = qual {
         major_pos_ins_vec.iter().for_each(|(major, _)| {
             anchor_qual[*major_pos2major_starting_point.get(major).unwrap()] =
-                ((qual[*major] / 5u8 + 1).min(9) + '0' as u8) as char;
+                ((qual[*major] / 5u8).min(9) + '0' as u8) as char;
         });
     }
     let anchor_qual = anchor_qual.iter().collect::<String>();

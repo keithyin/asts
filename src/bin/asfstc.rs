@@ -31,30 +31,20 @@ use clap::{self, Args, Parser};
 #[command(
     version,
     about,
-    long_about = "align subreads to cs, then output msa result"
+    long_about = "align subreads to consensus sequence, then output msa result"
 )]
 pub struct Cli {
     #[arg(long = "threads")]
     pub threads: Option<usize>,
 
-    // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
-    // pub preset: String,
     #[command(flatten)]
     pub io_args: IoArgs,
 
-    // #[command(flatten)]
-    // pub index_args: cli::IndexArgs,
-
-    // #[command(flatten)]
-    // pub map_args: cli::MapArgs,
     #[command(flatten)]
     pub align_args: AlignArgs,
 
     #[command(flatten)]
     pub oup_args: OupArgs,
-
-    #[arg(long="maxReadQuality", default_value_t=0.999)]
-    pub max_rq: f32,
 
     #[arg(long="lowBasePhreq", default_value_t=20)]
     pub low_base_phreq: u8,
@@ -105,12 +95,6 @@ impl IoArgs {
         } else {
             param
         };
-
-        // param = if let Some(ref rq_range_str) = self.rq_range {
-        //     param.set_rq_range(rq_range_str)
-        // } else {
-        //     param
-        // };
 
         param = param.set_rq_range(&self.rq_range);
         param = param.set_ch_idx(self.channel_idx);
@@ -294,7 +278,6 @@ fn main() {
 
         let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
-        let max_rq = args.max_rq;
         let low_base_phreq = args.low_base_phreq;
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
@@ -312,7 +295,6 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
-                        max_rq,
                         Some(low_base_phreq / 5)
                     )
                 })
