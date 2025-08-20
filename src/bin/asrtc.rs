@@ -1,7 +1,14 @@
 use std::{
-    collections::HashMap, fs, io::{BufWriter, Write}, path, str::FromStr, sync::{Arc, Mutex}, thread
+    collections::{HashMap, HashSet},
+    fs,
+    io::{BufWriter, Write},
+    path,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    thread,
 };
 
+use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
 use asts::{
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
@@ -17,7 +24,6 @@ use mm2::gskits::{
     pbar::{self, DEFAULT_INTERVAL},
     samtools::sort_by_tag,
 };
-use asts::params::{InputFilterParams, OupParams, MapParams, AlignParams};
 use rust_htslib::bam::Read;
 
 use time;
@@ -78,6 +84,9 @@ pub struct IoArgs {
     #[arg(long = "ch-idx")]
     pub channel_idx: Option<usize>,
 
+    #[arg(long = "channel-whitelist", help = "channel whitelist")]
+    pub channel_whitelist: Option<String>,
+
     #[arg(
         long = "np-range",
         help = "1:3,5,7:9 means [[1, 3], [5, 5], [7, 9]]. target np_range. only valid for target that contains np field"
@@ -107,6 +116,15 @@ impl IoArgs {
         };
 
         param
+    }
+
+    pub fn channel_whitelist(&self) -> Option<HashSet<usize>> {
+        self.channel_whitelist.as_ref().map(|whitelist| {
+            whitelist
+                .split(",")
+                .map(|v| v.parse::<usize>().unwrap())
+                .collect::<HashSet<_>>()
+        })
     }
 }
 
@@ -266,6 +284,9 @@ fn main() {
 
     let (ref_aligner, ref_seq) = build_ref_aligner(&args.ref_fa);
 
+    let channel_whitelist = args.io_args.channel_whitelist();
+    let channel_whitelist = channel_whitelist.as_ref();
+
     thread::scope(|s| {
         let ref_aligner = &ref_aligner;
         let ref_seq = &ref_seq;
@@ -291,6 +312,7 @@ fn main() {
                 oup_params,
                 sbr_and_smc_sender,
                 reporter_,
+                channel_whitelist,
             );
         });
 

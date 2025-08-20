@@ -6,6 +6,7 @@ use std::{
     time::Instant,
 };
 
+use ::gskits::gsbam::{bam_header_ext::BamHeaderExt, bam_record_ext::BamRecordExt};
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, PresetSet};
 pub use mm2;
@@ -74,6 +75,7 @@ pub fn subreads_and_smc_generator(
     oup_params: &OupParams,
     sender: crossbeam::channel::Sender<SubreadsAndSmc>,
     reporter: Arc<Mutex<Reporter>>,
+    whitelist: Option<&HashSet<usize>>,
 ) {
     tracing::info!("{input_filter_params:?}");
 
@@ -106,6 +108,14 @@ pub fn subreads_and_smc_generator(
             continue;
         }
 
+        let smc_record_ext = BamRecordExt::new(&smc_record);
+        if let Some(whitelist) = whitelist {
+            let ch = smc_record_ext.get_ch().unwrap();
+            if !whitelist.contains(&(ch as usize)) {
+                continue;
+            }
+        }
+
         let mut subreads_and_smc = SubreadsAndSmc::new(&smc_record);
         let smc = gskits::gsbam::bam_record_ext::BamRecordExt::new(&smc_record);
 
@@ -125,6 +135,8 @@ pub fn subreads_and_smc_generator(
             if sbr_ext.get_ch().unwrap() == smc.get_ch().unwrap() {
                 if !subreads_and_smc.add_subread(sbr, &oup_params.pass_through_tags) {
                     sbr_filter_by_length += 1;
+                } else {
+                    sbr_inp_cnt += 1;
                 }
             }
 

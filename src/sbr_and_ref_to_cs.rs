@@ -5,8 +5,8 @@ use std::{
     time::Instant,
 };
 
-use crate::{params, SubreadsAndSmc};
 use crate::{align_sbr_to_smc, reporter::Reporter};
+use crate::{params, SubreadsAndSmc};
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, Built, Mapping};
 use mm2::gskits::{
@@ -86,7 +86,8 @@ pub struct MsaResult {
     pub msa_seqs: Vec<String>,
     pub names: Vec<String>,
     pub positions: Vec<i32>,
-    pub low_q: Option<u8>
+    pub low_q: Option<u8>,
+    pub strands: Vec<String>
 }
 
 impl MsaResult {
@@ -237,9 +238,9 @@ pub fn align_sbr_and_ref_to_cs_worker(
         }
         let mut cs2ref_aln_res = cs2ref_aln_res.unwrap();
 
-        if cs2ref_aln_res.identity >= 0.999 {
-            continue;
-        }
+        // if cs2ref_aln_res.identity >= 0.9999 {
+        //     continue;
+        // }
 
         let ref_read_info = crate::read_info::ReadInfo::new_fa_record(
             "ref/-1".to_string(),
@@ -300,7 +301,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             &subreads_and_smc.smc.seq,
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
-            None
+            None,
         );
         if align_res.is_none() {
             continue;
@@ -337,7 +338,7 @@ pub fn build_msa_result_from_records(
     ref_seq: &str,
     ref_name: &str,
     qual: Option<&[u8]>,
-    low_q: Option<u8>
+    low_q: Option<u8>,
 ) -> Option<MsaResult> {
     if records.len() == 0 {
         return None;
@@ -358,6 +359,17 @@ pub fn build_msa_result_from_records(
     if !first_record.get_qname().starts_with("ref") {
         return None;
     }
+
+    let strands = records
+        .iter()
+        .map(|record| {
+            if record.is_reverse() {
+                "rev".to_string()
+            } else {
+                "fwd".to_string()
+            }
+        })
+        .collect::<Vec<String>>();
 
     let major_pos_ins = compute_max_ins_of_each_ref_position(&records, None, None, None);
     let mut major_pos_ins_vec = major_pos_ins
@@ -434,7 +446,8 @@ pub fn build_msa_result_from_records(
         msa_seqs: msa_seqs,
         names: names,
         positions: major_positions,
-        low_q: low_q
+        low_q: low_q,
+        strands: strands
     })
 }
 
@@ -518,7 +531,6 @@ fn merge_intervals(mut intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     merged
 }
 
-
 #[cfg(test)]
 mod test {
 
@@ -526,7 +538,5 @@ mod test {
     fn merge_intervals() {
         let intervals = vec![(0, 65), (64, 146), (145, 355)];
         println!("{:?}", super::merge_intervals(intervals));
-
-
     }
 }
