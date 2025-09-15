@@ -78,6 +78,9 @@ pub struct IoArgs {
         help = "0.9:1.1 means 0.9<=rq<=1.1. target rq_range. only valid for target that contains rq field"
     )]
     pub rq_range: Option<String>,
+
+    #[arg(long = "max-subreads", help = "max subreads to be aligned to smc, default 20")]
+    pub max_subreads: Option<usize>
 }
 
 impl IoArgs {
@@ -245,6 +248,9 @@ fn main() {
     let map_params = MapParams::default();
     let align_params = args.align_args.to_align_params();
     let reporter = Arc::new(Mutex::new(Reporter::default()));
+
+    let max_subreads = args.io_args.max_subreads;
+
     thread::scope(|s| {
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");
@@ -290,6 +296,7 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
+                        max_subreads
                     )
                 })
                 .unwrap();

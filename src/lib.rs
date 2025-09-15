@@ -175,9 +175,11 @@ pub fn align_sbr_to_smc_worker<T>(
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
+    max_subreads: Option<usize>
 ) where
     T: std::borrow::Borrow<str> + Eq + Hash,
 {
+    let max_subreads = max_subreads.unwrap_or(20);
     let mut scoped_timer = ScopedTimer::new();
 
     let mut max_time = 0;
@@ -205,7 +207,7 @@ pub fn align_sbr_to_smc_worker<T>(
         );
 
         fallback_num += no_hit_indices.len();
-        if align_infos.len() < 20 && !no_hit_indices.is_empty() {
+        if align_infos.len() < max_subreads && !no_hit_indices.is_empty() {
             tracing::warn!(
                 "fallback: smc_name:{}, num_sbrs:{}, num_fallback_sbrs:{}",
                 subreads_and_smc.smc.name,
