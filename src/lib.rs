@@ -93,6 +93,7 @@ pub fn subreads_and_smc_generator(
 
     let mut timer = scoped_timer.perform_timing();
     let mut cnt = 0;
+    let mut channel_filter_by_input_filter = 0;
     let mut sbr_inp_cnt = 0;
     let mut sbr_filter_by_length = 0;
 
@@ -105,6 +106,7 @@ pub fn subreads_and_smc_generator(
         }
 
         if !input_filter_params.valid(&smc_record) {
+            
             continue;
         }
 
@@ -112,6 +114,7 @@ pub fn subreads_and_smc_generator(
         if let Some(whitelist) = whitelist {
             let ch = smc_record_ext.get_ch().unwrap();
             if !whitelist.contains(&(ch as usize)) {
+                channel_filter_by_input_filter += 1;
                 continue;
             }
         }
@@ -157,6 +160,7 @@ pub fn subreads_and_smc_generator(
     {
         let mut reporter_ = reporter.lock().unwrap();
         reporter_.channel_reporter.inp_num += cnt;
+        reporter_.channel_reporter.filter_by_input_filter += channel_filter_by_input_filter;
         reporter_.sbr_reporter.inp_num += sbr_inp_cnt;
         reporter_.sbr_reporter.filter_by_length += sbr_filter_by_length;
     }

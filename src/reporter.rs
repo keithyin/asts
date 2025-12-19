@@ -3,6 +3,10 @@ use std::fmt::Display;
 #[derive(Debug, Default)]
 pub struct ChannelReporter {
     pub inp_num: usize,
+    pub filter_by_input_filter: usize,
+    pub filter_by_no_align: usize,
+    pub filter_by_cs2ref_align_fail: usize,
+
     pub out_num: usize,
 }
 
@@ -11,10 +15,16 @@ impl Display for ChannelReporter {
         write!(
             f,
             "\
-    inp_num:{}
-    oup_num:{:.4}% ({})
+    inp_num                    :{},
+    filter_by_input_filter     :{},
+    filter_by_no_align         :{},
+    filter_by_cs2ref_align_fail:{},
+    oup_num                    :{:.4}% ({})
         ",
             self.inp_num,
+            self.filter_by_input_filter,
+            self.filter_by_no_align,
+            self.filter_by_cs2ref_align_fail,
             (self.out_num as f32 / (self.inp_num as f32 + 1e-4)) * 100.,
             self.out_num,
         )

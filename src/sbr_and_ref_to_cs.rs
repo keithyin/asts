@@ -57,7 +57,12 @@ impl Cs2RefAlnRes {
     }
 }
 
-fn align_cs_to_ref(cs: &str, ref_aligner: &Aligner<Built>, ref_seq: &str) -> Option<Cs2RefAlnRes> {
+fn align_cs_to_ref(
+    cs: &str,
+    ref_aligner: &Aligner<Built>,
+    ref_seq: &str,
+    query_name: &str,
+) -> Option<Cs2RefAlnRes> {
     let hits = ref_aligner
         .map(
             cs.as_bytes(),
@@ -73,6 +78,30 @@ fn align_cs_to_ref(cs: &str, ref_aligner: &Aligner<Built>, ref_seq: &str) -> Opt
         let hit = &hits[0];
         Some(Cs2RefAlnRes::new(hit, ref_seq))
     } else {
+        let mut hits = hits;
+        hits.sort_by_key(|hit| hit.query_start);
+
+        let infos = hits
+            .iter()
+            .map(|hit| {
+                format!(
+                "qstart:{}, qend:{}, rstart:{}, rend:{}, primary:{}, supp:{}, rev:{:?}, score:{:?}, identity:{:.2}",
+                hit.query_start,
+                hit.query_end,
+                hit.target_start,
+                hit.target_end,
+                hit.is_primary,
+                hit.is_supplementary,
+                hit.strand,
+                hit.alignment.as_ref().unwrap().alignment_score,
+                MappingExt(hit).identity()
+            )
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        tracing::info!("align_cs_to_ref: query_name:{} \n{}\n------------------------------", query_name, infos);
+
         None
     };
 }
@@ -87,7 +116,7 @@ pub struct MsaResult {
     pub names: Vec<String>,
     pub positions: Vec<i32>,
     pub low_q: Option<u8>,
-    pub strands: Vec<String>
+    pub strands: Vec<String>,
 }
 
 impl MsaResult {
@@ -226,14 +255,22 @@ pub fn align_sbr_and_ref_to_cs_worker(
     let mut out_smc = 0;
     let mut fallback_num = 0;
     let mut fallback_rescued_num = 0;
+    let mut channel_filter_by_no_align = 0;
+    let mut channel_filter_by_cs2ref_align_fail = 0;
 
     for mut subreads_and_smc in recv {
         // tracing::info!("sbr_cnt:{}-{}", subreads_and_smc.smc.name, subreads_and_smc.subreads.len());
         let timer = scoped_timer.perform_timing();
         let start = Instant::now();
 
-        let cs2ref_aln_res = align_cs_to_ref(&subreads_and_smc.smc.seq, ref_aligner, ref_seq);
+        let cs2ref_aln_res = align_cs_to_ref(
+            &subreads_and_smc.smc.seq,
+            ref_aligner,
+            ref_seq,
+            &subreads_and_smc.smc.name,
+        );
         if cs2ref_aln_res.is_none() {
+            channel_filter_by_cs2ref_align_fail += 1;
             continue;
         }
         let mut cs2ref_aln_res = cs2ref_aln_res.unwrap();
@@ -304,6 +341,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             None,
         );
         if align_res.is_none() {
+            channel_filter_by_no_align += 1;
             continue;
         }
         let mut align_res = align_res.unwrap();
@@ -320,6 +358,9 @@ pub fn align_sbr_and_ref_to_cs_worker(
         let mut reporter_ = reporter.lock().unwrap();
         reporter_.sbr_reporter.filter_by_alignment += filter_by_alignment;
         reporter_.channel_reporter.out_num += out_smc;
+        reporter_.channel_reporter.filter_by_no_align += channel_filter_by_no_align;
+        reporter_.channel_reporter.filter_by_cs2ref_align_fail +=
+            channel_filter_by_cs2ref_align_fail;
         reporter_.sbr_reporter.fallback_num += fallback_num;
         reporter_.sbr_reporter.fallback_resuced_num += fallback_rescued_num;
     }
@@ -447,7 +488,7 @@ pub fn build_msa_result_from_records(
         names: names,
         positions: major_positions,
         low_q: low_q,
-        strands: strands
+        strands: strands,
     })
 }
 
