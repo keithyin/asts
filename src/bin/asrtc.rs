@@ -130,16 +130,16 @@ impl IoArgs {
 
 #[derive(Debug, Args, Clone, Default)]
 pub struct AlignArgs {
-    #[arg(short = 'm', default_value_t = 2, help = "matching_score>=0")]
+    #[arg(short = 'm', default_value_t = 4, help = "matching_score>=0")]
     matching_score: i32,
 
-    #[arg(short = 'M', default_value_t = 5, help = "mismatch_penalty >=0")]
+    #[arg(short = 'M', default_value_t = 10, help = "mismatch_penalty >=0")]
     mismatch_penalty: i32,
 
-    #[arg(short = 'o', default_value_t=String::from_str("2,24").unwrap() ,help = "gap_open_penalty >=0")]
+    #[arg(short = 'o', default_value_t=String::from_str("4,48").unwrap() ,help = "gap_open_penalty >=0")]
     gap_open_penalty: String,
 
-    #[arg(short = 'e', default_value_t=String::from_str("1,0").unwrap(), help = "gap_extension_penalty >=0")]
+    #[arg(short = 'e', default_value_t=String::from_str("2,1").unwrap(), help = "gap_extension_penalty >=0")]
     gap_extension_penalty: String,
 }
 
