@@ -98,6 +98,8 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
 
         out_sbrs += align_infos.len();
 
+        // align_infos = align_infos.into_iter().take(20).collect();
+
         let align_res = build_msa_result_from_records(
             align_infos,
             &subreads_and_smc.smc.seq,

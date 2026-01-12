@@ -45,6 +45,9 @@ pub struct Cli {
     #[arg(long = "ref-fa")]
     pub ref_fa: String,
 
+    #[arg(long = "ref-range")]
+    pub ref_range: Option<String>,
+
     // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
     // pub preset: String,
     #[command(flatten)]
@@ -318,11 +321,13 @@ fn main() {
 
         let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
+
+        let ref_range = args.ref_range.as_ref().map(|range_str| gskits::utils::Range::<usize>::new(range_str));
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
             let reporter_ = reporter.clone();
-
+            let ref_range = ref_range.clone();
             thread::Builder::new()
                 .name(format!("align_sbr_to_smc_worker-{}", idx))
                 .spawn_scoped(s, move || {
@@ -336,6 +341,7 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
+                        ref_range
                     )
                 })
                 .unwrap();

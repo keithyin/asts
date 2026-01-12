@@ -5,7 +5,7 @@ use std::{
     time::Instant,
 };
 
-use crate::{align_sbr_to_smc, reporter::Reporter};
+use crate::{align_sbr_to_smc, mapping2record, read_info::ReadInfo, reporter::Reporter};
 use crate::{params, SubreadsAndSmc};
 use crossbeam::channel::Sender;
 use minimap2::{Aligner, Built, Mapping};
@@ -62,6 +62,7 @@ fn align_cs_to_ref(
     ref_aligner: &Aligner<Built>,
     ref_seq: &str,
     query_name: &str,
+    ref_range: Option<&gskits::utils::Range<usize>>,
 ) -> Option<Cs2RefAlnRes> {
     let hits = ref_aligner
         .map(
@@ -73,6 +74,61 @@ fn align_cs_to_ref(
             None,
         )
         .unwrap();
+
+    let ref_bytes = ref_seq.as_bytes();
+
+    if let Some(ref_range) = ref_range {
+        let mut has_error_in_ref_range = false;
+
+        for hit in &hits {
+            let read_info = ReadInfo::new_fa_record("cs".to_string(), cs.to_string());
+            let mut target_idx = HashMap::new();
+            target_idx.insert(hit.target_name.as_ref().unwrap().as_str(), (0, 0));
+            let align_record =
+                mapping2record::build_bam_record_from_mapping(hit, &read_info, &target_idx);
+
+            let mut r_cursor = None;
+            let query = BamRecordExt::new(&align_record).get_seq();
+            let query_bytes = query.as_bytes();
+
+            for [qpos, rpos] in align_record.aligned_pairs_full() {
+                if rpos.is_some() {
+                    r_cursor = rpos;
+                }
+                if r_cursor.is_none() {
+                    continue;
+                }
+
+                let r_cursor_value = r_cursor.map(|v| v as usize).unwrap();
+                if rpos.is_none() || qpos.is_none() {
+                    if ref_range.within_range(r_cursor_value) {
+                        has_error_in_ref_range = true;
+                        break;
+                    }
+                }
+
+                if let (Some(qpos_), Some(rpos_)) = (qpos, rpos) {
+                    let qpos_ = qpos_ as usize;
+                    let rpos_ = rpos_ as usize;
+                    if ref_bytes[rpos_] != query_bytes[qpos_] {
+                        if ref_range.within_range(r_cursor_value) {
+                            has_error_in_ref_range = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if !has_error_in_ref_range {
+            tracing::info!(
+                "no error in interested ref range: query_name:{} ",
+                query_name,
+            );
+
+            return None;
+        }
+    }
 
     return if hits.len() == 1 {
         let hit = &hits[0];
@@ -100,7 +156,11 @@ fn align_cs_to_ref(
             .collect::<Vec<String>>()
             .join("\n");
 
-        tracing::info!("align_cs_to_ref: query_name:{} \n{}\n------------------------------", query_name, infos);
+        tracing::info!(
+            "align_cs_to_ref: query_name:{} \n{}\n------------------------------",
+            query_name,
+            infos
+        );
 
         None
     };
@@ -130,8 +190,8 @@ impl MsaResult {
         let mut regions = vec![];
         (0..tot_len).for_each(|pos| {
             if smc_aligned[pos] != ref_aligned[pos] {
-                let start = if pos > 10 { pos - 10 } else { 0 };
-                let end = (pos + 10).min(tot_len);
+                let start = if pos > 20 { pos - 20 } else { 0 };
+                let end = (pos + 20).min(tot_len);
                 regions.push((start, end));
             }
         });
@@ -244,6 +304,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
+    ref_range: Option<gskits::utils::Range<usize>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -268,6 +329,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             ref_aligner,
             ref_seq,
             &subreads_and_smc.smc.name,
+            ref_range.as_ref(),
         );
         if cs2ref_aln_res.is_none() {
             channel_filter_by_cs2ref_align_fail += 1;
@@ -332,6 +394,8 @@ pub fn align_sbr_and_ref_to_cs_worker(
         }
 
         out_sbrs += align_infos.len();
+
+        align_infos = align_infos.into_iter().take(20).collect();
 
         let align_res = build_msa_result_from_records(
             align_infos,
