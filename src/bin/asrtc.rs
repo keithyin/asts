@@ -27,7 +27,7 @@ use mm2::gskits::{
 use rust_htslib::bam::Read;
 
 use time;
-use tracing_subscriber;
+use tracing_subscriber::{self, EnvFilter};
 
 // use std::str::FromStr;
 
@@ -231,6 +231,7 @@ fn main() {
     let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
     tracing_subscriber::fmt::fmt()
         .with_timer(timer)
+        .with_env_filter(EnvFilter::from_default_env())
         .with_ansi(false)
         .with_writer(non_blocking)
         .init();

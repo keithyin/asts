@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     hash::Hash,
     sync::{Arc, Mutex},
     thread,
@@ -17,6 +18,7 @@ use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
+use tracing_subscriber::EnvFilter;
 
 pub mod mapping2record;
 pub mod params;
@@ -97,6 +99,11 @@ pub fn subreads_and_smc_generator(
     let mut sbr_inp_cnt = 0;
     let mut sbr_filter_by_length = 0;
 
+    let is_debug = env::var("RUST_LOG")
+        .unwrap_or("INFO".to_string())
+        .to_uppercase()
+        == "DEBUG";
+
     for smc_record in smc_bam_reader.records() {
         let smc_record = smc_record.unwrap();
 
@@ -106,7 +113,6 @@ pub fn subreads_and_smc_generator(
         }
 
         if !input_filter_params.valid(&smc_record) {
-            
             continue;
         }
 
@@ -153,6 +159,14 @@ pub fn subreads_and_smc_generator(
 
         timer.done_with_cnt(1);
         cnt += 1;
+
+        // tracing::de
+        if is_debug {
+            let all_names = subreads_and_smc.subreads.iter().map(|sbr| sbr.name.clone()).collect::<Vec<String>>();
+            let all_names = all_names.join("    \n");
+            tracing::debug!("ch={:?}\nsbrnames:\n{}", subreads_and_smc.smc.ch,  all_names);
+        }
+
         sender.send(subreads_and_smc).unwrap();
         timer = scoped_timer.perform_timing();
     }
@@ -179,7 +193,7 @@ pub fn align_sbr_to_smc_worker<T>(
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
-    max_subreads: Option<usize>
+    max_subreads: Option<usize>,
 ) where
     T: std::borrow::Borrow<str> + Eq + Hash,
 {
