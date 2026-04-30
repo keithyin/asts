@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    env, fs,
     io::{BufWriter, Write},
     path,
     str::FromStr,
@@ -229,9 +229,15 @@ fn main() {
     let log_path = format!("{}.asrtc.log", args.io_args.prefix);
     let log_file = std::fs::File::create(&log_path).unwrap();
     let (non_blocking, _guard) = tracing_appender::non_blocking(log_file);
+
+    let filter = match env::var("RUST_LOG") {
+        Ok(_) => EnvFilter::from_default_env(),
+        Err(_) => EnvFilter::new("info"),
+    };
+
     tracing_subscriber::fmt::fmt()
         .with_timer(timer)
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(filter)
         .with_ansi(false)
         .with_writer(non_blocking)
         .init();
@@ -266,6 +272,11 @@ fn main() {
     if !smc_fname.eq(&args.io_args.smc) {
         tmp_files.push(smc_fname.clone());
     }
+
+    tracing::info!(
+        "cmd: {}",
+        env::args().into_iter().collect::<Vec<String>>().join(" ")
+    );
 
     tracing::info!("sorting sbr.bam {}", args.io_args.sbr);
     let sorted_sbr = sort_by_tag(&args.io_args.sbr, "ch", None);
@@ -323,7 +334,10 @@ fn main() {
         let align_threads = args.threads.unwrap_or(num_cpus::get()) - 4;
         let (align_res_sender, align_res_recv) = crossbeam::channel::bounded(1000);
 
-        let ref_range = args.ref_range.as_ref().map(|range_str| gskits::utils::Range::<usize>::new(range_str));
+        let ref_range = args
+            .ref_range
+            .as_ref()
+            .map(|range_str| gskits::utils::Range::<usize>::new(range_str));
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();
@@ -342,7 +356,7 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
-                        ref_range
+                        ref_range,
                     )
                 })
                 .unwrap();
