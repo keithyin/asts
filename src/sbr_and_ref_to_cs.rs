@@ -24,6 +24,7 @@ use serde::Serialize;
 #[derive(Debug, Default)]
 struct Cs2RefAlnRes {
     identity: f32,
+    query_align_len: u32,
     mm: u32,
     ins: u32,
     homo_ins: u32,
@@ -47,6 +48,7 @@ impl Cs2RefAlnRes {
 
         Self {
             identity: identity,
+            query_align_len: (hit.query_end - hit.query_start) as u32,
             mm: 0,
             ins: 0,
             homo_ins: 0,
@@ -169,6 +171,7 @@ fn align_cs_to_ref(
 #[derive(Debug, Serialize, Default)]
 pub struct MsaResult {
     pub identity: f32,
+    pub query_aln_len: u32,
     pub mm: u32,
     pub ins: u32,
     pub del: u32,
@@ -410,6 +413,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
         }
         let mut align_res = align_res.unwrap();
         align_res.identity = cs2ref_aln_res.identity;
+        align_res.query_aln_len = cs2ref_aln_res.query_align_len;
         align_res = align_res.extract_error_region();
 
         timer.done_with_cnt(1);
@@ -545,6 +549,7 @@ pub fn build_msa_result_from_records(
 
     Some(MsaResult {
         identity: 0.0,
+        query_aln_len: 0,
         mm: 0,
         ins: 0,
         del: 0,
