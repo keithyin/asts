@@ -74,6 +74,7 @@ pub struct AlignParams {
     pub mismatch_penalty: Option<i32>,
     pub gap_open_penalty: Option<String>,
     pub gap_extension_penalty: Option<String>,
+    pub poly_n_gap_left_align: bool
 }
 
 impl AlignParams {
@@ -98,6 +99,11 @@ impl AlignParams {
 
     pub fn set_gap_extension_penalty(mut self, ge: String) -> Self {
         self.gap_extension_penalty = Some(ge);
+        self
+    }
+
+    pub fn set_poly_n_gap_left_align(mut self, poly_n_gap_left_align: bool) -> Self {
+        self.poly_n_gap_left_align = poly_n_gap_left_align;
         self
     }
 }

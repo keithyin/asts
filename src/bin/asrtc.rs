@@ -144,6 +144,9 @@ pub struct AlignArgs {
 
     #[arg(short = 'e', default_value_t=String::from_str("2,1").unwrap(), help = "gap_extension_penalty >=0")]
     gap_extension_penalty: String,
+
+    #[arg(long = "polyNGapLeftAlign", default_value_t = false)]
+    poly_n_gap_left_align: bool,
 }
 
 impl AlignArgs {
@@ -153,7 +156,8 @@ impl AlignArgs {
             .set_m_score(self.matching_score)
             .set_mm_score(self.mismatch_penalty)
             .set_gap_open_penalty(self.gap_open_penalty.clone())
-            .set_gap_extension_penalty(self.gap_extension_penalty.clone());
+            .set_gap_extension_penalty(self.gap_extension_penalty.clone())
+            .set_poly_n_gap_left_align(self.poly_n_gap_left_align);
 
         param
     }

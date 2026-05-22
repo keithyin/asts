@@ -162,9 +162,13 @@ pub fn subreads_and_smc_generator(
 
         // tracing::de
         if is_debug {
-            let all_names = subreads_and_smc.subreads.iter().map(|sbr| sbr.name.clone()).collect::<Vec<String>>();
+            let all_names = subreads_and_smc
+                .subreads
+                .iter()
+                .map(|sbr| sbr.name.clone())
+                .collect::<Vec<String>>();
             let all_names = all_names.join("    \n");
-            tracing::debug!("ch={:?}\nsbrnames:\n{}", subreads_and_smc.smc.ch,  all_names);
+            tracing::debug!("ch={:?}\nsbrnames:\n{}", subreads_and_smc.smc.ch, all_names);
         }
 
         sender.send(subreads_and_smc).unwrap();
@@ -327,10 +331,16 @@ where
             .unwrap();
 
         let mut has_hit = false;
-        for hit in hits {
+        for mut hit in hits {
             has_hit = true;
             // no supp is needed !!
-
+            if align_params.poly_n_gap_left_align {
+                mm2::cigar_adjust::cigar_adjust_poly_gap_left_align(
+                    &mut hit,
+                    subreads_and_smc.smc.seq.as_bytes(),
+                    subread.seq.as_bytes(),
+                );
+            }
             let hit_ext = MappingExt(&hit);
             let identity = hit_ext.identity_gap_compressed();
             let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());

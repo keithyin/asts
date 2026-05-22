@@ -111,7 +111,7 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
             continue;
         }
         let mut align_res = align_res.unwrap();
-        align_res.identity = pred_q;
+        align_res.identity = pred_q.unwrap_or(0.0);
         align_res = align_res.extract_lowq_region();
 
         timer.done_with_cnt(1);

@@ -93,13 +93,13 @@ dependencies = [
 
 [[package]]
 name = "asts"
-version = "0.16.6"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
  "criterion",
  "crossbeam",
- "gskits 0.15.15",
+ "gskits",
  "indicatif",
  "lazy_static",
  "minimap2",
@@ -758,23 +758,6 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
 name = "gskits"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69bbd672f3689123231843bec46194cb456e46233ce570769fc8d7c062db5447"
-dependencies = [
- "anyhow",
- "bio 2.0.3",
- "chrono",
- "indicatif",
- "lazy_static",
- "num_cpus",
- "rust-htslib",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "gskits"
 version = "0.15.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0571995a6784ecc211dc8922fb338c9b4a259603a0c067359b4ba9749ed348b8"
@@ -829,6 +812,16 @@ name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
+
+[[package]]
+name = "hp_tr_finder"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30a03c36b3449f4e6649c35610ec9230459c7340ea913b2d40e6536f8ef1a15a"
+dependencies = [
+ "intervaltree",
+ "regex",
+]
 
 [[package]]
 name = "hts-sys"
@@ -1039,6 +1032,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "intervaltree"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "270bc34e57047cab801a8c871c124d9dc7132f6473c6401f645524f4e6edd111"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1246,21 +1248,23 @@ dependencies = [
 
 [[package]]
 name = "mm2"
-version = "0.23.1"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d7c34d121ad985de141800a53cc2d55080ac8b45046de2b79ad7d42cebc5cc3"
+checksum = "e80c814a692b9ca90f405ee3178cf08361d00409691bd37242c4e891dbaf3349"
 dependencies = [
  "anyhow",
  "bio 1.6.0",
  "clap 4.5.27",
  "crossbeam",
  "glob",
- "gskits 0.13.0",
+ "gskits",
+ "hp_tr_finder",
  "indicatif",
  "lazy_static",
  "minimap2",
  "num_cpus",
  "rayon",
+ "regex",
  "rust-htslib",
  "time",
  "tracing",
