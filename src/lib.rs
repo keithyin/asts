@@ -46,6 +46,15 @@ impl SubreadsAndSmc {
         }
     }
 
+    pub fn from_seq_qual(seq: &str, qual: Vec<u8>) -> Self {
+        let smc_len = seq.len();
+        Self {
+            smc: ReadInfo::new_fq_record(format!("smc"), seq.to_string(), qual),
+            smc_len: smc_len,
+            subreads: vec![],
+        }
+    }
+
     pub fn add_subread(
         &mut self,
         record: &rust_htslib::bam::Record,
@@ -59,6 +68,20 @@ impl SubreadsAndSmc {
         if sbr_len > min_len && sbr_len < max_len {
             self.subreads
                 .push(ReadInfo::from_bam_record(record, None, tags));
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn add_subread_str(&mut self, name: String, seq: String) -> bool{
+        let sbr_len = seq.len() as f64;
+        let smc_len = self.smc_len as f64;
+        let max_len = smc_len * 3.0;
+        let min_len = smc_len * 0.0;
+
+        if sbr_len > min_len && sbr_len < max_len {
+            self.subreads.push(ReadInfo::new_fa_record(name, seq));
             true
         } else {
             false
@@ -341,6 +364,9 @@ where
                     subread.seq.as_bytes(),
                 );
             }
+
+            mm2::visualization::blast_like_alignment(&subread.seq, &subreads_and_smc.smc.seq, &hit, None);
+
             let hit_ext = MappingExt(&hit);
             let identity = hit_ext.identity_gap_compressed();
             let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());

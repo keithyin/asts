@@ -207,11 +207,22 @@ fn build_ref_aligner(ref_fa: &str) -> (Aligner<Built>, String) {
     let read_infos = read_fastx(reader);
     assert!(read_infos.len() == 1);
 
-    let aligner = Aligner::builder()
+    let mut aligner = Aligner::builder()
         .map_ont()
         .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
         .with_sam_out()
-        .with_index_threads(10)
+        .with_index_threads(10);
+
+    if read_infos[0].seq.len() < 200 {
+        aligner.idxopt.k = 4;
+        aligner.idxopt.w = 1;
+
+        aligner.mapopt.min_cnt = 2;
+        aligner.mapopt.min_dp_max = 10; // min dp score
+        aligner.mapopt.min_chain_score = 10; // this is important for short insert
+        aligner.mapopt.min_ksw_len = 0;
+    }
+    let aligner = aligner
         .with_seq_and_id(read_infos[0].seq.as_bytes(), read_infos[0].name.as_bytes())
         .unwrap();
     (aligner, read_infos[0].seq.clone())
