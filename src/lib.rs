@@ -365,7 +365,7 @@ where
                 );
             }
 
-            mm2::visualization::blast_like_alignment(&subread.seq, &subreads_and_smc.smc.seq, &hit, None);
+            // mm2::visualization::blast_like_alignment(&subread.seq, &subreads_and_smc.smc.seq, &hit, None);
 
             let hit_ext = MappingExt(&hit);
             let identity = hit_ext.identity_gap_compressed();
