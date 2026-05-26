@@ -442,6 +442,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
     );
 }
 
+#[tracing::instrument(skip(records, ref_seq, ref_name, qual, low_q))]
 pub fn build_msa_result_from_records(
     mut records: Vec<Record>,
     ref_seq: &str,
@@ -450,6 +451,7 @@ pub fn build_msa_result_from_records(
     low_q: Option<u8>,
 ) -> Option<MsaResult> {
     if records.len() == 0 {
+        tracing::warn!("no align records for msa. {}", ref_name);
         return None;
     }
     let ref_seq = ref_seq.as_bytes();
@@ -466,6 +468,11 @@ pub fn build_msa_result_from_records(
     let first_record = records.first().unwrap();
     let first_record = BamRecordExt::new(first_record);
     if !first_record.get_qname().starts_with("ref") {
+        tracing::warn!(
+            "first records not start with ref. ref_name={}, firstRecordName:{}",
+            ref_name,
+            first_record.get_qname()
+        );
         return None;
     }
 
@@ -704,7 +711,7 @@ mod test {
             subreads_and_smc.smc.qual.as_deref(),
             Some(10),
         );
-       
+
         let mut align_res = align_res.unwrap();
         align_res.identity = 1.0;
         align_res.query_aln_len = 100;
