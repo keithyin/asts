@@ -222,6 +222,17 @@ fn build_ref_aligner(ref_fa: &str) -> (Aligner<Built>, String) {
         aligner.mapopt.min_chain_score = 10; // this is important for short insert
         aligner.mapopt.min_ksw_len = 0;
     }
+
+    if read_infos[0].seq.len() < 100 {
+        aligner.idxopt.k = 3;
+        aligner.idxopt.w = 1;
+
+        aligner.mapopt.min_cnt = 2;
+        aligner.mapopt.min_dp_max = 10; // min dp score
+        aligner.mapopt.min_chain_score = 10; // this is important for short insert
+        aligner.mapopt.min_ksw_len = 0;
+    }
+
     let aligner = aligner
         .with_seq_and_id(read_infos[0].seq.as_bytes(), read_infos[0].name.as_bytes())
         .unwrap();
