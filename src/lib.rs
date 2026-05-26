@@ -74,7 +74,7 @@ impl SubreadsAndSmc {
         }
     }
 
-    pub fn add_subread_str(&mut self, name: String, seq: String) -> bool{
+    pub fn add_subread_str(&mut self, name: String, seq: String) -> bool {
         let sbr_len = seq.len() as f64;
         let smc_len = self.smc_len as f64;
         let max_len = smc_len * 3.0;
@@ -406,7 +406,9 @@ fn build_asts_aligner(
         .with_sam_out()
         .with_index_threads(1);
 
-    aligner.idxopt.set_hpc();
+    if !short_insert {
+        aligner.idxopt.set_hpc();
+    }
 
     aligner.mapopt.best_n = 1;
     // aligner.mapopt.q_occ_frac = 0.0;
