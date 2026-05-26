@@ -398,8 +398,6 @@ pub fn align_sbr_and_ref_to_cs_worker(
 
         out_sbrs += align_infos.len();
 
-        align_infos = align_infos.into_iter().take(20).collect();
-
         let align_res = build_msa_result_from_records(
             align_infos,
             &subreads_and_smc.smc.seq,
@@ -464,6 +462,8 @@ pub fn build_msa_result_from_records(
             .parse::<i32>()
             .unwrap()
     });
+
+    records = records.into_iter().take(20).collect();
 
     let first_record = records.first().unwrap();
     let first_record = BamRecordExt::new(first_record);
