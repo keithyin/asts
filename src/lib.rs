@@ -340,6 +340,17 @@ where
     let mut bam_records = vec![];
     let mut no_hit_subreads_idx = vec![];
 
+    let mut extra_flags = vec![];
+    extra_flags.push(0x4000000); // eqx
+    extra_flags.push(0x40000000); // sam hit only
+    
+    if align_params.fwd_only {
+        extra_flags.push(1048576);
+    }
+    if align_params.rev_only {
+        extra_flags.push(2097152);
+    }
+
     sbr_indices.into_iter().for_each(|i| {
         let subread = &subreads_and_smc.subreads[i];
         let hits = aligner
@@ -348,7 +359,7 @@ where
                 true,
                 true,
                 None,
-                Some(&[0x4000000, 0x40000000]),
+                Some(&extra_flags),
                 Some(subread.name.as_bytes()),
             )
             .unwrap();

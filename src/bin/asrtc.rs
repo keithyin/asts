@@ -101,6 +101,11 @@ pub struct IoArgs {
         help = "0.9:1.1 means 0.9<=rq<=1.1. target rq_range. only valid for target that contains rq field"
     )]
     pub rq_range: Option<String>,
+
+    #[arg(long = "fwd-only")]
+    pub fwd_only: bool,
+    #[arg(long = "rev-only")]
+    pub rev_only: bool,
 }
 
 impl IoArgs {
@@ -117,6 +122,11 @@ impl IoArgs {
         } else {
             param
         };
+        if self.fwd_only && self.rev_only {
+            panic!("fwd-only && rev-only can't all be true")
+        }
+        param.fwd_only = self.fwd_only;
+        param.rev_only = self.rev_only;
 
         param
     }
@@ -320,7 +330,10 @@ fn main() {
     let input_filter_params = args.io_args.to_input_filter_params();
 
     let map_params = MapParams::default();
-    let align_params = args.align_args.to_align_params();
+    let mut align_params = args.align_args.to_align_params();
+    align_params.fwd_only = input_filter_params.fwd_only;
+    align_params.rev_only = input_filter_params.rev_only;
+
     let reporter = Arc::new(Mutex::new(Reporter::default()));
 
     let (ref_aligner, ref_seq) = build_ref_aligner(&args.ref_fa);

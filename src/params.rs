@@ -15,6 +15,8 @@ pub struct InputFilterParams {
     pub np_range: Option<Range<i32>>,
     pub rq_range: Option<Range<f32>>,
     pub ch_idx: Option<usize>,
+    pub fwd_only: bool,
+    pub rev_only: bool,
 }
 
 impl InputFilterParams {
@@ -56,6 +58,14 @@ impl InputFilterParams {
             }
         }
 
+        if self.fwd_only && !record_ext.get_qname().ends_with("fwd") {
+            return false;
+        }
+
+        if self.rev_only && !record_ext.get_qname().ends_with("rev") {
+            return false;
+        }
+
         if let Some(ch_idx) = self.ch_idx {
             return record_ext
                 .get_ch()
@@ -74,7 +84,9 @@ pub struct AlignParams {
     pub mismatch_penalty: Option<i32>,
     pub gap_open_penalty: Option<String>,
     pub gap_extension_penalty: Option<String>,
-    pub poly_n_gap_left_align: bool
+    pub poly_n_gap_left_align: bool,
+    pub fwd_only: bool,
+    pub rev_only: bool
 }
 
 impl AlignParams {
