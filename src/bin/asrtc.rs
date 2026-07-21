@@ -8,7 +8,7 @@ use std::{
     thread,
 };
 
-use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
+use asts::{params::{AlignParams, InputFilterParams, MapParams, OupParams}, utils::Range};
 use asts::{
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
@@ -376,7 +376,7 @@ fn main() {
         let ref_range = args
             .ref_range
             .as_ref()
-            .map(|range_str| gskits::utils::Range::<usize>::new(range_str));
+            .map(|range_str| Range::<usize>::new(range_str));
         for idx in 0..align_threads {
             let sbr_and_smc_recv_ = sbr_and_smc_recv.clone();
             let align_res_sender_ = align_res_sender.clone();

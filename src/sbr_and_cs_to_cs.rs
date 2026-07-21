@@ -106,6 +106,7 @@ pub fn align_sbr_and_fake_cs_to_cs_worker(
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
             low_q,
+            None
         );
         if align_res.is_none() {
             continue;

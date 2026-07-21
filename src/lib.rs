@@ -26,6 +26,7 @@ pub mod read_info;
 pub mod reporter;
 pub mod sbr_and_cs_to_cs;
 pub mod sbr_and_ref_to_cs;
+pub mod utils;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;

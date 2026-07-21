@@ -5,9 +5,12 @@ use std::{
     time::Instant,
 };
 
-use crate::{align_sbr_to_smc, mapping2record, read_info::ReadInfo, reporter::Reporter};
+use crate::{
+    align_sbr_to_smc, mapping2record, read_info::ReadInfo, reporter::Reporter, utils::Range,
+};
 use crate::{params, SubreadsAndSmc};
 use crossbeam::channel::Sender;
+use gskits::dna::reverse_complement;
 use minimap2::{Aligner, Built, Mapping};
 use mm2::gskits::{
     gsbam::{
@@ -30,7 +33,8 @@ struct Cs2RefAlnRes {
     homo_ins: u32,
     del: u32,
     homo_del: u32,
-    ref_sub_seq: Option<String>,
+    pub is_reverse: bool,
+    pub ref_sub_seq: Option<String>,
 }
 
 impl Cs2RefAlnRes {
@@ -54,6 +58,7 @@ impl Cs2RefAlnRes {
             homo_ins: 0,
             del: 0,
             homo_del: 0,
+            is_reverse: hit.strand.eq(&minimap2::Strand::Reverse),
             ref_sub_seq: ref_sub_seq,
         }
     }
@@ -64,7 +69,7 @@ fn align_cs_to_ref(
     ref_aligner: &Aligner<Built>,
     ref_seq: &str,
     query_name: &str,
-    ref_range: Option<&gskits::utils::Range<usize>>,
+    ref_range: Option<&mut Range<usize>>,
 ) -> Option<Cs2RefAlnRes> {
     let hits = ref_aligner
         .map(
@@ -79,10 +84,13 @@ fn align_cs_to_ref(
 
     let ref_bytes = ref_seq.as_bytes();
 
-    if let Some(ref_range) = ref_range {
+    if let Some(ref_range) = &ref_range {
         let mut has_error_in_ref_range = false;
 
         for hit in &hits {
+            if !hit.is_primary {
+                continue;
+            }
             let read_info = ReadInfo::new_fa_record("cs".to_string(), cs.to_string());
             let mut target_idx = HashMap::new();
             target_idx.insert(hit.target_name.as_ref().unwrap().as_str(), (0, 0));
@@ -134,6 +142,9 @@ fn align_cs_to_ref(
 
     return if hits.len() == 1 {
         let hit = &hits[0];
+
+        ref_range.map(|range| range.shift(-hit.query_start as i64));
+
         Some(Cs2RefAlnRes::new(hit, ref_seq))
     } else {
         let mut hits = hits;
@@ -180,6 +191,7 @@ pub struct MsaResult {
     pub positions: Vec<i32>,
     pub low_q: Option<u8>,
     pub strands: Vec<String>,
+    pub smc_ranges: Option<Range<usize>>,
 }
 
 impl MsaResult {
@@ -191,13 +203,34 @@ impl MsaResult {
 
         let tot_len = smc_aligned.len();
         let mut regions = vec![];
-        (0..tot_len).for_each(|pos| {
-            if smc_aligned[pos] != ref_aligned[pos] {
-                let start = if pos > 20 { pos - 20 } else { 0 };
-                let end = (pos + 20).min(tot_len);
-                regions.push((start, end));
-            }
-        });
+
+        if let Some(smc_ranges) = &self.smc_ranges {
+            (0..tot_len).for_each(|pos| {
+                let major = self.positions[pos];
+
+                if smc_ranges.within_range(major as usize) {
+                    if regions.is_empty() {
+                        regions.push((pos, pos));
+                    } else {
+                        let last = regions.last_mut().unwrap();
+                        if (last.1 + 1) == pos {
+                            last.1 += 1;
+                        } else {
+                            regions.push((pos, pos));
+                        }
+                    }
+                }
+            });
+        } else {
+            (0..tot_len).for_each(|pos| {
+                if smc_aligned[pos] != ref_aligned[pos] {
+                    let start = if pos > 20 { pos - 20 } else { 0 };
+                    let end = (pos + 20).min(tot_len);
+                    regions.push((start, end));
+                }
+            });
+        }
+
         let regions = merge_intervals(regions);
 
         let mut region_positions = regions
@@ -307,7 +340,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
     align_params: &params::AlignParams,
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
-    ref_range: Option<gskits::utils::Range<usize>>,
+    mut ref_range: Option<Range<usize>>,
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -332,13 +365,20 @@ pub fn align_sbr_and_ref_to_cs_worker(
             ref_aligner,
             ref_seq,
             &subreads_and_smc.smc.name,
-            ref_range.as_ref(),
+            ref_range.as_mut(),
         );
+
         if cs2ref_aln_res.is_none() {
             channel_filter_by_cs2ref_align_fail += 1;
             continue;
         }
         let mut cs2ref_aln_res = cs2ref_aln_res.unwrap();
+
+        // 为了输出的结果更直观，这里将 smc 的结果和 reference的方向进行对齐
+        if cs2ref_aln_res.is_reverse {
+            subreads_and_smc.smc.seq =
+                String::from_utf8(reverse_complement(subreads_and_smc.smc.seq.as_bytes())).unwrap();
+        }
 
         // if cs2ref_aln_res.identity >= 0.9999 {
         //     continue;
@@ -404,6 +444,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
             None,
+            ref_range.as_ref(),
         );
         if align_res.is_none() {
             channel_filter_by_no_align += 1;
@@ -447,6 +488,7 @@ pub fn build_msa_result_from_records(
     ref_name: &str,
     qual: Option<&[u8]>,
     low_q: Option<u8>,
+    ref_range: Option<&Range<usize>>,
 ) -> Option<MsaResult> {
     if records.len() == 0 {
         tracing::warn!("no align records for msa. {}", ref_name);
@@ -486,6 +528,10 @@ pub fn build_msa_result_from_records(
             }
         })
         .collect::<Vec<String>>();
+
+    // 基于 ref-range 构建出来 smc range
+
+    let smc_ranges = ref_range.map(|v| get_ref_range_from_query_range(&records[0], v));
 
     let major_pos_ins = compute_max_ins_of_each_ref_position(&records, None, None, None);
     let mut major_pos_ins_vec = major_pos_ins
@@ -565,6 +611,7 @@ pub fn build_msa_result_from_records(
         positions: major_positions,
         low_q: low_q,
         strands: strands,
+        smc_ranges: smc_ranges,
     })
 }
 
@@ -648,6 +695,45 @@ fn merge_intervals(mut intervals: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
     merged
 }
 
+pub fn get_ref_range_from_query_range(record: &Record, range: &Range<usize>) -> Range<usize> {
+    let mut qpos_cursor = None;
+    let mut rpos_cursor = None;
+    let mut ref_ranges = vec![];
+    for [qpos, rpos] in record.aligned_pairs_full() {
+        if qpos.is_some() {
+            qpos_cursor = qpos;
+        }
+        if rpos.is_some() {
+            rpos_cursor = rpos;
+        }
+
+        if qpos_cursor.is_none() || rpos_cursor.is_none() {
+            continue;
+        }
+
+        if range.within_range(qpos_cursor.map(|v| v as usize).unwrap()) {
+            if ref_ranges.is_empty() {
+                ref_ranges.push((
+                    rpos_cursor.map(|v| v as usize).unwrap(),
+                    rpos_cursor.map(|v| v as usize).unwrap(),
+                ));
+            } else {
+                let last = ref_ranges.last_mut().unwrap();
+                if (last.1 + 1) == rpos_cursor.map(|v| v as usize).unwrap() {
+                    last.1 += 1;
+                } else {
+                    ref_ranges.push((
+                        rpos_cursor.map(|v| v as usize).unwrap(),
+                        rpos_cursor.map(|v| v as usize).unwrap(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Range::new_range(ref_ranges)
+}
+
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
@@ -710,6 +796,7 @@ mod test {
             &subreads_and_smc.smc.name,
             subreads_and_smc.smc.qual.as_deref(),
             Some(10),
+            None,
         );
 
         let mut align_res = align_res.unwrap();
