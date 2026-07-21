@@ -35,6 +35,8 @@ struct Cs2RefAlnRes {
     homo_del: u32,
     pub is_reverse: bool,
     pub ref_sub_seq: Option<String>,
+    pub ori_target_start: usize,
+    pub ori_target_end: usize,
 }
 
 impl Cs2RefAlnRes {
@@ -60,6 +62,8 @@ impl Cs2RefAlnRes {
             homo_del: 0,
             is_reverse: hit.strand.eq(&minimap2::Strand::Reverse),
             ref_sub_seq: ref_sub_seq,
+            ori_target_start: target_start,
+            ori_target_end: target_end,
         }
     }
 }
@@ -132,7 +136,7 @@ fn align_cs_to_ref(
 
         if !has_error_in_ref_range {
             tracing::info!(
-                "no error in interested ref range: query_name:{} ",
+                "NoError in interested range: query_name:{} ",
                 query_name,
             );
 
@@ -143,9 +147,12 @@ fn align_cs_to_ref(
     return if hits.len() == 1 {
         let hit = &hits[0];
 
-        ref_range.map(|range| range.shift(-hit.query_start as i64));
+        let cs2ref_aln_res = Cs2RefAlnRes::new(hit, ref_seq);
+        ref_range.map(|range| range.shift(-(cs2ref_aln_res.ori_target_start as i64)));
 
-        Some(Cs2RefAlnRes::new(hit, ref_seq))
+        tracing::info!("ReadyToShow. query_name:{}", query_name);
+
+        Some(cs2ref_aln_res)
     } else {
         let mut hits = hits;
         hits.sort_by_key(|hit| hit.query_start);
@@ -170,7 +177,7 @@ fn align_cs_to_ref(
             .join("\n");
 
         tracing::info!(
-            "align_cs_to_ref: query_name:{} \n{}\n------------------------------",
+            "align_cs_to_ref: MultiAlignment: query_name:{} \n{}\n------------------------------",
             query_name,
             infos
         );
@@ -719,8 +726,10 @@ pub fn get_ref_range_from_query_range(record: &Record, range: &Range<usize>) -> 
                 ));
             } else {
                 let last = ref_ranges.last_mut().unwrap();
-                if (last.1 + 1) == rpos_cursor.map(|v| v as usize).unwrap() {
-                    last.1 += 1;
+                if (last.1 + 1) == rpos_cursor.map(|v| v as usize).unwrap()
+                    || last.1 == rpos_cursor.map(|v| v as usize).unwrap()
+                {
+                    last.1 = rpos_cursor.map(|v| v as usize).unwrap();
                 } else {
                     ref_ranges.push((
                         rpos_cursor.map(|v| v as usize).unwrap(),
