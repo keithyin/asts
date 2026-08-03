@@ -74,6 +74,7 @@ fn align_cs_to_ref(
     ref_seq: &str,
     query_name: &str,
     ref_range: Option<&mut Range<usize>>,
+    keep_perfect_match: bool,
 ) -> Option<Cs2RefAlnRes> {
     let hits = ref_aligner
         .map(
@@ -134,7 +135,7 @@ fn align_cs_to_ref(
             }
         }
 
-        if !has_error_in_ref_range {
+        if !has_error_in_ref_range && !keep_perfect_match {
             tracing::info!("NoError in interested range: query_name:{} ", query_name,);
 
             return None;
@@ -276,10 +277,10 @@ impl MsaResult {
     }
 
     pub fn trim_poly_ends(self) -> Self {
-        if self.msa_seqs.len() < 2 {
+        if self.msa_seqs.len() < 3 {
             return self;
         }
-        let ref_aligned_seq = &self.msa_seqs[1];
+        let ref_aligned_seq = &self.msa_seqs[2];
         let ref_aligned_bytes = ref_aligned_seq.as_bytes();
         let mut start = 0;
         let mut prev_base = None;
@@ -419,6 +420,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
     oup_params: &params::OupParams,
     reporter: Arc<Mutex<Reporter>>,
     mut ref_range: Option<Range<usize>>,
+    keep_perfect_match: bool,
 ) {
     let mut scoped_timer = ScopedTimer::new();
 
@@ -444,6 +446,7 @@ pub fn align_sbr_and_ref_to_cs_worker(
             ref_seq,
             &subreads_and_smc.smc.name,
             ref_range.as_mut(),
+            keep_perfect_match,
         );
 
         if cs2ref_aln_res.is_none() {
@@ -456,6 +459,11 @@ pub fn align_sbr_and_ref_to_cs_worker(
         if cs2ref_aln_res.is_reverse {
             subreads_and_smc.smc.seq =
                 String::from_utf8(reverse_complement(subreads_and_smc.smc.seq.as_bytes())).unwrap();
+        }
+
+        if !keep_perfect_match && cs2ref_aln_res.identity >= 0.999999 {
+            tracing::info!("skip perfect match");
+            continue;
         }
 
         // if cs2ref_aln_res.identity >= 0.9999 {

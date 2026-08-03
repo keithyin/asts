@@ -48,6 +48,9 @@ pub struct Cli {
     #[arg(long = "ref-range")]
     pub ref_range: Option<String>,
 
+    #[arg(long="keep-perfect-match")]
+    pub keep_perfect_match: bool,
+
     // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
     // pub preset: String,
     #[command(flatten)]
@@ -341,6 +344,8 @@ fn main() {
     let channel_whitelist = args.io_args.channel_whitelist();
     let channel_whitelist = channel_whitelist.as_ref();
 
+    let keep_perfect_match = args.keep_perfect_match;
+
     thread::scope(|s| {
         let ref_aligner = &ref_aligner;
         let ref_seq = &ref_seq;
@@ -396,6 +401,8 @@ fn main() {
                         oup_params,
                         reporter_,
                         ref_range,
+                        keep_perfect_match
+                        
                     )
                 })
                 .unwrap();

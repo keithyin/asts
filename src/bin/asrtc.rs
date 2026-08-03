@@ -8,7 +8,10 @@ use std::{
     thread,
 };
 
-use asts::{params::{AlignParams, InputFilterParams, MapParams, OupParams}, utils::Range};
+use asts::{
+    params::{AlignParams, InputFilterParams, MapParams, OupParams},
+    utils::Range,
+};
 use asts::{
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
@@ -396,6 +399,7 @@ fn main() {
                         oup_params,
                         reporter_,
                         ref_range,
+                        false,
                     )
                 })
                 .unwrap();
