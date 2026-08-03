@@ -135,10 +135,7 @@ fn align_cs_to_ref(
         }
 
         if !has_error_in_ref_range {
-            tracing::info!(
-                "NoError in interested range: query_name:{} ",
-                query_name,
-            );
+            tracing::info!("NoError in interested range: query_name:{} ", query_name,);
 
             return None;
         }
@@ -274,6 +271,80 @@ impl MsaResult {
         Self {
             msa_seqs: new_msa_seqs,
             positions: region_positions,
+            ..self
+        }
+    }
+
+    pub fn trim_poly_ends(self) -> Self {
+        if self.msa_seqs.len() < 2 {
+            return self;
+        }
+        let ref_aligned_seq = &self.msa_seqs[1];
+        let ref_aligned_bytes = ref_aligned_seq.as_bytes();
+        let mut start = 0;
+        let mut prev_base = None;
+        while start < ref_aligned_seq.len() {
+            let cur = ref_aligned_bytes[start];
+            if cur == b'-' {
+                if prev_base.is_none() {
+                    start += 1;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+
+            if prev_base.is_none() {
+                start += 1;
+                prev_base = Some(cur);
+                continue;
+            }
+
+            let prev = prev_base.unwrap();
+            if prev == cur {
+                start += 1;
+                continue;
+            }
+            break;
+        }
+
+        let mut end = ref_aligned_seq.len();
+        prev_base = None;
+        while end > 0 && start < (end - 1) {
+            let cur = ref_aligned_bytes[end - 1];
+            if cur == b'-' {
+                if prev_base.is_none() {
+                    end -= 1;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+
+            if prev_base.is_none() {
+                end -= 1;
+                prev_base = Some(cur);
+                continue;
+            }
+
+            let prev = prev_base.unwrap();
+            if prev == cur {
+                end -= 1;
+                continue;
+            }
+
+            break;
+        }
+
+        let new_msa_seqs = self
+            .msa_seqs
+            .iter()
+            .map(|ori_str| ori_str[start..end].to_string())
+            .collect::<Vec<_>>();
+
+        Self {
+            msa_seqs: new_msa_seqs,
+            positions: self.positions[start..end].to_vec(),
             ..self
         }
     }
