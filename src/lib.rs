@@ -348,14 +348,14 @@ where
         extra_flags.push(0x4000000); // eqx
         extra_flags.push(0x40000000); // sam hit only
 
-        if !subread.name.starts_with("ref") {
-            if align_params.fwd_only {
-                extra_flags.push(1048576);
-            }
-            if align_params.rev_only {
-                extra_flags.push(2097152);
-            }
-        }
+        // if !subread.name.starts_with("ref") {
+        //     if align_params.fwd_only {
+        //         extra_flags.push(1048576);
+        //     }
+        //     if align_params.rev_only {
+        //         extra_flags.push(2097152);
+        //     }
+        // }
 
         let hits = aligner
             .map(
@@ -387,6 +387,20 @@ where
             let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());
             if coverage < oup_params.oup_coverage_threshold
                 || identity < oup_params.oup_identity_threshold
+            {
+                continue;
+            }
+
+            if !subread.name.starts_with("ref")
+                && align_params.fwd_only
+                && hit.strand.eq(&minimap2::Strand::Reverse)
+            {
+                continue;
+            }
+
+            if !subread.name.starts_with("ref")
+                && align_params.rev_only
+                && hit.strand.eq(&minimap2::Strand::Forward)
             {
                 continue;
             }

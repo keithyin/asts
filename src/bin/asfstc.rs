@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::{BufWriter, Write},
     path,
@@ -85,6 +85,14 @@ pub struct IoArgs {
         help = "0.0:0.999 means 0.0<=rq<=0.999. target rq_range. only valid for target that contains rq field"
     )]
     pub rq_range: String,
+
+    #[arg(long = "channel-whitelist", help = "channel whitelist")]
+    pub channel_whitelist: Option<String>,
+
+    #[arg(long = "fwd-only")]
+    pub fwd_only: bool,
+    #[arg(long = "rev-only")]
+    pub rev_only: bool,
 }
 
 impl IoArgs {
@@ -99,7 +107,22 @@ impl IoArgs {
         param = param.set_rq_range(&self.rq_range);
         param = param.set_ch_idx(self.channel_idx);
 
+        if self.fwd_only && self.rev_only {
+            panic!("fwd-only && rev-only can't all be true")
+        }
+        param.fwd_only = self.fwd_only;
+        param.rev_only = self.rev_only;
+
         param
+    }
+
+    pub fn channel_whitelist(&self) -> Option<HashSet<usize>> {
+        self.channel_whitelist.as_ref().map(|whitelist| {
+            whitelist
+                .split(",")
+                .map(|v| v.parse::<usize>().unwrap())
+                .collect::<HashSet<_>>()
+        })
     }
 }
 
@@ -124,6 +147,9 @@ pub struct AlignArgs {
 
     #[arg(short = 'e', default_value_t=String::from_str("2,1").unwrap(), help = "gap_extension_penalty >=0")]
     gap_extension_penalty: String,
+
+    #[arg(long = "polyNGapLeftAlign", default_value_t = false)]
+    poly_n_gap_left_align: bool,
 }
 
 impl AlignArgs {
@@ -133,7 +159,8 @@ impl AlignArgs {
             .set_m_score(self.matching_score)
             .set_mm_score(self.mismatch_penalty)
             .set_gap_open_penalty(self.gap_open_penalty.clone())
-            .set_gap_extension_penalty(self.gap_extension_penalty.clone());
+            .set_gap_extension_penalty(self.gap_extension_penalty.clone())
+            .set_poly_n_gap_left_align(self.poly_n_gap_left_align);
 
         param
     }
@@ -247,8 +274,13 @@ fn main() {
     let input_filter_params = args.io_args.to_input_filter_params();
 
     let map_params = MapParams::default();
-    let align_params = args.align_args.to_align_params();
+    let mut align_params = args.align_args.to_align_params();
+    align_params.fwd_only = input_filter_params.fwd_only;
+    align_params.rev_only = input_filter_params.rev_only;
     let reporter = Arc::new(Mutex::new(Reporter::default()));
+
+    let channel_whitelist = args.io_args.channel_whitelist();
+    let channel_whitelist = channel_whitelist.as_ref();
 
     thread::scope(|s| {
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
@@ -273,7 +305,7 @@ fn main() {
                 oup_params,
                 sbr_and_smc_sender,
                 reporter_,
-                None
+                channel_whitelist
             );
         });
 
