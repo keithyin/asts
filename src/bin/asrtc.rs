@@ -14,7 +14,7 @@ use asts::{
 };
 use asts::{
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
-    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
+    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag
 };
 use crossbeam::channel::Receiver;
 use minimap2::{Aligner, Built};
@@ -24,9 +24,7 @@ use mm2::gskits::{
         fastx2bam::{fasta2bam, fastq2bam},
         read_fastx,
     },
-    pbar::{self, DEFAULT_INTERVAL},
-    samtools::sort_by_tag,
-};
+    pbar::{self, DEFAULT_INTERVAL}};
 use rust_htslib::bam::Read;
 
 use time;
@@ -109,6 +107,13 @@ pub struct IoArgs {
     pub fwd_only: bool,
     #[arg(long = "rev-only")]
     pub rev_only: bool,
+
+    #[arg(
+        long = "remove-sorted-bam",
+        default_value_t = false,
+        help = "remove the sorted bam files after the run. default is false, keep them for next run"
+    )]
+    pub remove_sorted_bam: bool,
 }
 
 impl IoArgs {
@@ -323,8 +328,11 @@ fn main() {
     tracing::info!("sorting smc.bam {}", smc_fname);
     let sorted_smc = sort_by_tag(&smc_fname, "ch", None);
 
-    tmp_files.push(sorted_sbr.clone());
-    tmp_files.push(sorted_smc.clone());
+    if args.io_args.remove_sorted_bam {
+        // 删除 sorted 好的 bam 文件, 否则保留供下次 sort_by_tag 直接复用
+        tmp_files.push(sorted_sbr.clone());
+        tmp_files.push(sorted_smc.clone());
+    }
 
     tracing::info!("building target to idx map");
     let target2idx = build_target_to_idx(&sorted_smc);

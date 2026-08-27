@@ -8,11 +8,13 @@ use std::{
 };
 
 use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
-use asts::{align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator};
+use asts::{
+    align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator, utils::sort_by_tag,
+};
 use gskits;
 use mm2::gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
-    samtools::{samtools_bai, sort_by_coordinates, sort_by_tag},
+    samtools::{samtools_bai, sort_by_coordinates},
 };
 use rust_htslib::bam::Read;
 use time;
@@ -79,13 +81,23 @@ pub struct IoArgs {
     )]
     pub rq_range: Option<String>,
 
-    #[arg(long = "max-subreads", help = "max subreads to be aligned to smc, default 20")]
+    #[arg(
+        long = "max-subreads",
+        help = "max subreads to be aligned to smc, default 20"
+    )]
     pub max_subreads: Option<usize>,
 
     #[arg(long = "fwd-only")]
     pub fwd_only: bool,
     #[arg(long = "rev-only")]
     pub rev_only: bool,
+
+    #[arg(
+        long = "remove-sorted-bam",
+        default_value_t = false,
+        help = "remove the sorted bam files after the run. default is false, keep them for next run"
+    )]
+    pub remove_sorted_bam: bool,
 }
 
 impl IoArgs {
@@ -247,8 +259,11 @@ fn main() {
     tracing::info!("sorting smc.bam {}", smc_fname);
     let sorted_smc = sort_by_tag(&smc_fname, "ch", None);
 
-    tmp_files.push(sorted_sbr.clone());
-    tmp_files.push(sorted_smc.clone());
+    if args.io_args.remove_sorted_bam {
+        // 删除 sorted 好的 bam 文件, 否则保留供下次 sort_by_tag 直接复用
+        tmp_files.push(sorted_sbr.clone());
+        tmp_files.push(sorted_smc.clone());
+    }
 
     tracing::info!("building target to idx map");
     let target2idx = build_target_to_idx(&sorted_smc);
@@ -309,7 +324,7 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
-                        max_subreads
+                        max_subreads,
                     )
                 })
                 .unwrap();

@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "0.19.2"
+version = "1.0.0"
 edition = "2021"
 description = "asts"
 license = "MIT"

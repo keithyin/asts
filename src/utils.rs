@@ -1,4 +1,4 @@
-use std::{fmt::Debug, str::FromStr};
+use std::{fmt::Debug, process::Command, str::FromStr};
 
 use serde::Serialize;
 
@@ -87,4 +87,82 @@ impl Range<i64> {
             *end = new_end;
         });
     }
+}
+
+// pub fn sort_by_tag(bam_file: &str, tag: &str, threads: Option<usize>) -> String {
+//     let threads = threads.unwrap_or(num_cpus::get_physical() / 2);
+//     let out_bam = format!(
+//         "{}.sort_by_{}.bam",
+//         bam_file.rsplit_once(".").unwrap().0,
+//         tag
+//     );
+
+//     let mut cmd = Command::new("samtools");
+//     cmd.args([
+//         "sort",
+//         "-n",
+//         "-t",
+//         tag,
+//         "-o",
+//         out_bam.as_str(),
+//         "-@",
+//         threads.to_string().as_str(),
+//         bam_file,
+//     ]);
+
+//     let oup = cmd.output().expect(&format!("sort {} error", bam_file));
+//     if !oup.status.success() {
+//         panic!(
+//             "sort {} error. {}",
+//             bam_file,
+//             String::from_utf8(oup.stderr).unwrap()
+//         );
+//     }
+
+//     out_bam
+// }
+
+pub fn sort_by_tag(bam_file: &str, tag: &str, threads: Option<usize>) -> String {
+    let out_bam = format!(
+        "{}.sort_by_{}.bam",
+        bam_file.rsplit_once(".").unwrap().0,
+        tag
+    );
+
+    // 如果输出文件存在且比输入文件新，则直接返回
+    if let (Ok(input_meta), Ok(output_meta)) =
+        (std::fs::metadata(bam_file), std::fs::metadata(&out_bam))
+    {
+        if let (Ok(input_time), Ok(output_time)) = (input_meta.modified(), output_meta.modified()) {
+            if output_time > input_time {
+                return out_bam;
+            }
+        }
+    }
+
+    // 否则执行排序
+    let threads = threads.unwrap_or(num_cpus::get_physical() / 2);
+    let mut cmd = Command::new("samtools");
+    cmd.args([
+        "sort",
+        "-n",
+        "-t",
+        tag,
+        "-o",
+        out_bam.as_str(),
+        "-@",
+        threads.to_string().as_str(),
+        bam_file,
+    ]);
+
+    let oup = cmd.output().expect(&format!("sort {} error", bam_file));
+    if !oup.status.success() {
+        panic!(
+            "sort {} error. {}",
+            bam_file,
+            String::from_utf8(oup.stderr).unwrap()
+        );
+    }
+
+    out_bam
 }

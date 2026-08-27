@@ -8,17 +8,16 @@ use std::{
     thread,
 };
 
+use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
 use asts::{
     reporter::Reporter, sbr_and_cs_to_cs::align_sbr_and_fake_cs_to_cs_worker,
-    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator,
+    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag,
 };
 use crossbeam::channel::Receiver;
 use mm2::gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     pbar::{self, DEFAULT_INTERVAL},
-    samtools::sort_by_tag,
 };
-use asts::params::{InputFilterParams, OupParams, AlignParams, MapParams};
 use rust_htslib::bam::Read;
 
 use time;
@@ -46,9 +45,8 @@ pub struct Cli {
     #[command(flatten)]
     pub oup_args: OupArgs,
 
-    #[arg(long="lowBasePhreq", default_value_t=20)]
+    #[arg(long = "lowBasePhreq", default_value_t = 20)]
     pub low_base_phreq: u8,
-
 }
 
 #[derive(Debug, Args, Clone)]
@@ -93,6 +91,13 @@ pub struct IoArgs {
     pub fwd_only: bool,
     #[arg(long = "rev-only")]
     pub rev_only: bool,
+
+    #[arg(
+        long = "remove-sorted-bam",
+        default_value_t = false,
+        help = "remove the sorted bam files after the run. default is false, keep them for next run"
+    )]
+    pub remove_sorted_bam: bool,
 }
 
 impl IoArgs {
@@ -128,18 +133,10 @@ impl IoArgs {
 
 #[derive(Debug, Args, Clone, Default)]
 pub struct AlignArgs {
-    #[arg(
-        short = 'm',
-        default_value_t = 4,
-        help = "matching_score>=0"
-    )]
+    #[arg(short = 'm', default_value_t = 4, help = "matching_score>=0")]
     matching_score: i32,
 
-    #[arg(
-        short = 'M',
-        default_value_t = 10,
-        help = "mismatch_penalty >=0"
-    )]
+    #[arg(short = 'M', default_value_t = 10, help = "mismatch_penalty >=0")]
     mismatch_penalty: i32,
 
     #[arg(short = 'o', default_value_t=String::from_str("4,48").unwrap() ,help = "gap_open_penalty >=0")]
@@ -264,8 +261,11 @@ fn main() {
     tracing::info!("sorting smc.bam {}", smc_fname);
     let sorted_smc = sort_by_tag(&smc_fname, "ch", None);
 
-    tmp_files.push(sorted_sbr.clone());
-    tmp_files.push(sorted_smc.clone());
+    if args.io_args.remove_sorted_bam {
+        // 删除 sorted 好的 bam 文件, 否则保留供下次 sort_by_tag 直接复用
+        tmp_files.push(sorted_sbr.clone());
+        tmp_files.push(sorted_smc.clone());
+    }
 
     tracing::info!("building target to idx map");
     let target2idx = build_target_to_idx(&sorted_smc);
@@ -305,7 +305,7 @@ fn main() {
                 oup_params,
                 sbr_and_smc_sender,
                 reporter_,
-                channel_whitelist
+                channel_whitelist,
             );
         });
 
@@ -328,7 +328,7 @@ fn main() {
                         align_params,
                         oup_params,
                         reporter_,
-                        Some(low_base_phreq / 5)
+                        Some(low_base_phreq / 5),
                     )
                 })
                 .unwrap();
