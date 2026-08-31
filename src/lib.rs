@@ -21,12 +21,15 @@ use tracing;
 use tracing_subscriber::EnvFilter;
 
 pub mod mapping2record;
+pub mod mm2_ext;
 pub mod params;
 pub mod read_info;
 pub mod reporter;
 pub mod sbr_and_cs_to_cs;
 pub mod sbr_and_ref_to_cs;
 pub mod utils;
+// use mm2::cigar_adjust::cigar_adjust_poly_gap_left_align;
+use mm2_ext::cigar_adjust::cigar_adjust_poly_gap_left_align;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
@@ -373,7 +376,7 @@ where
             has_hit = true;
             // no supp is needed !!
             if align_params.poly_n_gap_left_align {
-                mm2::cigar_adjust::cigar_adjust_poly_gap_left_align(
+                cigar_adjust_poly_gap_left_align(
                     &mut hit,
                     subreads_and_smc.smc.seq.as_bytes(),
                     subread.seq.as_bytes(),

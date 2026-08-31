@@ -8,10 +8,13 @@ use std::{
     thread,
 };
 
-use asts::{params::{AlignParams, InputFilterParams, MapParams, OupParams}, utils::Range};
+use asts::{
+    params::{AlignParams, InputFilterParams, MapParams, OupParams},
+    utils::Range,
+};
 use asts::{
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
-    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag
+    sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag,
 };
 use crossbeam::channel::Receiver;
 use minimap2::{Aligner, Built};
@@ -21,7 +24,7 @@ use mm2::gskits::{
         fastx2bam::{fasta2bam, fastq2bam},
         read_fastx,
     },
-    pbar::{self, DEFAULT_INTERVAL}
+    pbar::{self, DEFAULT_INTERVAL},
 };
 use rust_htslib::bam::Read;
 
@@ -47,7 +50,7 @@ pub struct Cli {
     #[arg(long = "ref-range")]
     pub ref_range: Option<String>,
 
-    #[arg(long="keep-perfect-match")]
+    #[arg(long = "keep-perfect-match")]
     pub keep_perfect_match: bool,
 
     // #[arg(long="preset", default_value_t=String::from_str("map-ont").unwrap())]
@@ -410,8 +413,7 @@ fn main() {
                         oup_params,
                         reporter_,
                         ref_range,
-                        keep_perfect_match
-                        
+                        keep_perfect_match,
                     )
                 })
                 .unwrap();
