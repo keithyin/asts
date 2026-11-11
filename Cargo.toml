@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "1.1.0"
+version = "1.3.0"
 edition = "2021"
 description = "asts"
 license = "MIT"
@@ -18,10 +18,15 @@ tracing-appender = "0.2.3"
 time = "0.3.34"
 anyhow = "1.0.82"
 indicatif= {version="0.17.7"}
-minimap2="=0.1.23"
 num_cpus="1.16"
 crossbeam="0.8"
-mm2 = "0.26.1"
+# 比对引擎：rammap（纯 Rust 的 minimap2 重实现）。
+# NOTE: crate 名为 `rammap-core`，但 lib name 是 `rammap`，所以代码中 `use rammap::api::...`
+# 1) 精确锁定版本：该 crate 处于月更节奏且有 API 变动；升级流程见
+#    docs/migration-mm2-to-rammap.md 的「rammap 升级 SOP」。
+# 2) 关闭默认的 `parallel`(rayon) feature：asts 自己已经按线程切分任务，
+#    嵌套并行会导致线程超订。
+rammap-core = { version = "=1.2.0", default-features = false }
 serde = {version="1.0", features = ["derive"]}
 serde_json = "1.0"
 lazy_static = "1.5.0"

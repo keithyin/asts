@@ -6,19 +6,18 @@ use std::{
 };
 
 use crate::{
+    align::{cigar, Hit, RefAligner},
     align_sbr_to_smc, mapping2record, read_info::ReadInfo, reporter::Reporter, utils::Range,
 };
 use crate::{params, SubreadsAndSmc};
 use crossbeam::channel::Sender;
 use gskits::dna::reverse_complement;
-use minimap2::{Aligner, Built, Mapping};
-use mm2::gskits::{
+use gskits::{
     gsbam::{
         bam_record_ext::BamRecordExt, plp_counts_from_records::compute_max_ins_of_each_ref_position,
     },
     utils::ScopedTimer,
 };
-use mm2::mapping_ext::MappingExt;
 use rust_htslib::bam::{ext::BamRecordExtensions, Record};
 use tracing;
 
@@ -40,27 +39,25 @@ struct Cs2RefAlnRes {
 }
 
 impl Cs2RefAlnRes {
-    fn new(hit: &Mapping, ref_seq: &str) -> Self {
+    fn new(hit: &Hit, ref_seq: &str) -> Self {
         let target_start = if hit.target_start > 10 {
             hit.target_start - 10
         } else {
             0
-        } as usize;
+        };
 
-        let target_end = (hit.target_end + 10).min(ref_seq.len() as i32) as usize;
+        let target_end = (hit.target_end + 10).min(ref_seq.len());
         let ref_sub_seq = Some(ref_seq[target_start..target_end].to_string());
 
-        let identity = MappingExt(hit).identity();
-
         Self {
-            identity: identity,
+            identity: cigar::identity(hit),
             query_align_len: (hit.query_end - hit.query_start) as u32,
             mm: 0,
             ins: 0,
             homo_ins: 0,
             del: 0,
             homo_del: 0,
-            is_reverse: hit.strand.eq(&minimap2::Strand::Reverse),
+            is_reverse: hit.is_reverse,
             ref_sub_seq: ref_sub_seq,
             ori_target_start: target_start,
             ori_target_end: target_end,
@@ -70,22 +67,15 @@ impl Cs2RefAlnRes {
 
 fn align_cs_to_ref(
     cs: &str,
-    ref_aligner: &Aligner<Built>,
+    ref_aligner: &dyn RefAligner,
     ref_seq: &str,
     query_name: &str,
     ref_range: Option<&mut Range<usize>>,
     keep_perfect_match: bool,
 ) -> Option<Cs2RefAlnRes> {
-    let hits = ref_aligner
-        .map(
-            cs.as_bytes(),
-            false,
-            false,
-            None,
-            Some(&[67108864, 68719476736]), // 67108864 eqx, 68719476736 secondary
-            None,
-        )
-        .unwrap();
+    // CIGAR 的 eqx 与 SECONDARY_SEQ 语义由建库时的 AlignSetup 指定
+    // （见 bin/asrtc.rs 的 build_ref_aligner），这里只负责发起比对。
+    let hits = ref_aligner.map("cs", cs.as_bytes());
 
     let ref_bytes = ref_seq.as_bytes();
 
@@ -98,7 +88,7 @@ fn align_cs_to_ref(
             }
             let read_info = ReadInfo::new_fa_record("cs".to_string(), cs.to_string());
             let mut target_idx = HashMap::new();
-            target_idx.insert(hit.target_name.as_ref().unwrap().as_str(), (0, 0));
+            target_idx.insert(hit.target_name.as_str(), (0, 0));
             let align_record =
                 mapping2record::build_bam_record_from_mapping(hit, &read_info, &target_idx);
 
@@ -166,9 +156,9 @@ fn align_cs_to_ref(
                 hit.target_end,
                 hit.is_primary,
                 hit.is_supplementary,
-                hit.strand,
-                hit.alignment.as_ref().unwrap().alignment_score,
-                MappingExt(hit).identity()
+                hit.is_reverse,
+                hit.score,
+                cigar::identity(hit)
             )
             })
             .collect::<Vec<String>>()
@@ -412,7 +402,7 @@ impl MsaResult {
 pub fn align_sbr_and_ref_to_cs_worker(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
     sender: Sender<MsaResult>,
-    ref_aligner: &Aligner<Built>,
+    ref_aligner: &dyn RefAligner,
     ref_seq: &str,
     target_idx: &HashMap<String, (usize, usize)>,
     map_params: &params::MapParams,

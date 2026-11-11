@@ -1,0 +1,5 @@
+short_insert	exact	0	ref:0-58|0-58|rev=false|pri=true|sup=false|mapq=45|score=116|cigar=[(58, 7)]|cs=Some(":58")
+short_insert	ins	0	ref:0-59|0-58|rev=false|pri=true|sup=false|mapq=47|score=110|cigar=[(8, 7), (1, 1), (50, 7)]|cs=Some(":8+g:50")
+short_insert	del	0	ref:0-57|0-58|rev=false|pri=true|sup=false|mapq=43|score=108|cigar=[(8, 7), (1, 2), (49, 7)]|cs=Some(":8-a:49")
+short_insert	homopolymer	0	ref:0-59|0-58|rev=false|pri=true|sup=false|mapq=44|score=110|cigar=[(12, 7), (1, 1), (46, 7)]|cs=Some(":12+g:46")
+short_insert	truncated	0	ref:0-39|0-39|rev=false|pri=true|sup=false|mapq=20|score=78|cigar=[(39, 7)]|cs=Some(":39")

@@ -4,10 +4,12 @@ use gskits::{
     gsbam::bam_record_ext::{BamRecord, BamRecordExt},
     utils::Range,
 };
-use minimap2::{Aligner, PresetSet};
 
-pub trait TOverrideAlignerParam {
-    fn modify_aligner(&self, aligner: &mut Aligner<PresetSet>);
+use crate::align::AlignSetup;
+
+/// 把 asts 自己的参数对象叠加到与引擎无关的 [`AlignSetup`] 上。
+pub trait TOverrideAlignSetup {
+    fn modify_setup(&self, setup: &mut AlignSetup);
 }
 
 #[derive(Default, Debug)]
@@ -120,33 +122,33 @@ impl AlignParams {
     }
 }
 
-impl TOverrideAlignerParam for AlignParams {
-    fn modify_aligner(&self, aligner: &mut Aligner<PresetSet>) {
+impl TOverrideAlignSetup for AlignParams {
+    fn modify_setup(&self, setup: &mut AlignSetup) {
         if let Some(m) = self.matching_score {
-            aligner.mapopt.a = m;
+            setup.scoring.match_score = Some(m);
         }
 
         if let Some(mm) = self.mismatch_penalty {
-            aligner.mapopt.b = mm;
+            setup.scoring.mismatch_penalty = Some(mm);
         }
 
         if let Some(gap_o) = &self.gap_open_penalty {
             if gap_o.contains(",") {
                 let (o1, o2) = gap_o.rsplit_once(",").unwrap();
-                aligner.mapopt.q = o1.parse::<i32>().unwrap();
-                aligner.mapopt.q2 = o2.parse::<i32>().unwrap();
+                setup.scoring.gap_open = Some(o1.parse::<i32>().unwrap());
+                setup.scoring.gap_open2 = Some(o2.parse::<i32>().unwrap());
             } else {
-                aligner.mapopt.q = gap_o.parse::<i32>().unwrap();
+                setup.scoring.gap_open = Some(gap_o.parse::<i32>().unwrap());
             }
         }
 
         if let Some(gap_e) = &self.gap_extension_penalty {
             if gap_e.contains(",") {
                 let (e1, e2) = gap_e.rsplit_once(",").unwrap();
-                aligner.mapopt.e = e1.parse::<i32>().unwrap();
-                aligner.mapopt.e2 = e2.parse::<i32>().unwrap();
+                setup.scoring.gap_extend = Some(e1.parse::<i32>().unwrap());
+                setup.scoring.gap_extend2 = Some(e2.parse::<i32>().unwrap());
             } else {
-                aligner.mapopt.e = gap_e.parse::<i32>().unwrap();
+                setup.scoring.gap_extend = Some(gap_e.parse::<i32>().unwrap());
             }
         }
     }
@@ -155,8 +157,8 @@ impl TOverrideAlignerParam for AlignParams {
 #[derive(Debug, Clone, Default)]
 pub struct MapParams {}
 
-impl TOverrideAlignerParam for MapParams {
-    fn modify_aligner(&self, _aligner: &mut Aligner<PresetSet>) {}
+impl TOverrideAlignSetup for MapParams {
+    fn modify_setup(&self, _setup: &mut AlignSetup) {}
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -181,13 +183,13 @@ impl IndexParams {
     }
 }
 
-impl TOverrideAlignerParam for IndexParams {
-    fn modify_aligner(&self, aligner: &mut Aligner<PresetSet>) {
+impl TOverrideAlignSetup for IndexParams {
+    fn modify_setup(&self, setup: &mut AlignSetup) {
         if let Some(k) = self.kmer {
-            aligner.idxopt.k = k as i16;
+            setup.k = Some(k);
         }
         if let Some(w) = self.wins {
-            aligner.idxopt.w = w as i16;
+            setup.w = Some(w);
         }
     }
 }
@@ -290,10 +292,11 @@ impl OupParams {
     }
 }
 
-impl TOverrideAlignerParam for OupParams {
-    fn modify_aligner(&self, aligner: &mut Aligner<PresetSet>) {
+impl TOverrideAlignSetup for OupParams {
+    fn modify_setup(&self, setup: &mut AlignSetup) {
         if self.discard_secondary {
-            aligner.mapopt.flag &= !0x1000000000;
+            // 迁移前等价于清掉 SECONDARY_SEQ 标志：secondary 不再输出 SEQ。
+            setup.secondary_seq = false;
         }
     }
 }

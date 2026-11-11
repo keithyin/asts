@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use asts::params::{InputFilterParams, OupParams};
 use asts::{reporter::Reporter, subreads_and_smc_generator};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use mm2::gskits::samtools::sort_by_tag;
+use gskits::samtools::sort_by_tag;
 
 fn subreads_and_smc_generator_benchmark(c: &mut Criterion) {
     let sbr_bam = "/data/ccs_data/speed-test/13k-5h/4cc/20241220_Sync_Y0701_01_H01_Run0001_called.adapter.filtered.bam";

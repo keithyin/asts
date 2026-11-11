@@ -6,3 +6,6 @@ tmp.txt
 *.txt
 *.log
 *.json
+
+# IDE / 内部计划产物，不入库
+.codebuddy/

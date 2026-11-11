@@ -13,12 +13,12 @@ use asts::{
     utils::Range,
 };
 use asts::{
+    align::{build_aligner, AlignSetup, RefAligner},
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag
 };
 use crossbeam::channel::Receiver;
-use minimap2::{Aligner, Built};
-use mm2::gskits::{
+use gskits::{
     fastx_reader::{
         fasta_reader::FastaFileReader,
         fastx2bam::{fasta2bam, fastq2bam},
@@ -220,41 +220,35 @@ fn build_target_to_idx(smc_bam: &str) -> HashMap<String, (usize, usize)> {
     target2idx
 }
 
-fn build_ref_aligner(ref_fa: &str) -> (Aligner<Built>, String) {
+fn build_ref_aligner(ref_fa: &str) -> (Box<dyn RefAligner>, String) {
     let reader = FastaFileReader::new(ref_fa.to_string());
     let read_infos = read_fastx(reader);
     assert!(read_infos.len() == 1);
 
-    let mut aligner = Aligner::builder()
-        .map_ont()
-        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-        .with_sam_out()
-        .with_index_threads(10);
+    let seq = read_infos[0].seq.clone();
+    let mut setup = AlignSetup {
+        // cs→ref 只需要 eqx + secondary_seq（次要比对也带 SEQ）
+        emit_cs: false,
+        emit_md: false,
+        sam_hit_only: false,
+        secondary_seq: true,
+        ..Default::default()
+    };
 
-    if read_infos[0].seq.len() < 200 {
-        aligner.idxopt.k = 4;
-        aligner.idxopt.w = 1;
-
-        aligner.mapopt.min_cnt = 2;
-        aligner.mapopt.min_dp_max = 10; // min dp score
-        aligner.mapopt.min_chain_score = 10; // this is important for short insert
-        aligner.mapopt.min_ksw_len = 0;
+    if seq.len() < 200 {
+        setup.k = Some(4);
+        setup.w = Some(1);
+        setup.short_insert = true;
     }
 
-    if read_infos[0].seq.len() < 100 {
-        aligner.idxopt.k = 3;
-        aligner.idxopt.w = 1;
-
-        aligner.mapopt.min_cnt = 2;
-        aligner.mapopt.min_dp_max = 10; // min dp score
-        aligner.mapopt.min_chain_score = 10; // this is important for short insert
-        aligner.mapopt.min_ksw_len = 0;
+    if seq.len() < 100 {
+        setup.k = Some(3);
+        setup.w = Some(1);
+        setup.short_insert = true;
     }
 
-    let aligner = aligner
-        .with_seq_and_id(read_infos[0].seq.as_bytes(), read_infos[0].name.as_bytes())
-        .unwrap();
-    (aligner, read_infos[0].seq.clone())
+    let aligner = build_aligner(&setup, seq.as_bytes(), &read_infos[0].name);
+    (aligner, seq)
 }
 
 fn main() {
@@ -353,7 +347,7 @@ fn main() {
     let channel_whitelist = channel_whitelist.as_ref();
 
     thread::scope(|s| {
-        let ref_aligner = &ref_aligner;
+        let ref_aligner: &dyn RefAligner = ref_aligner.as_ref();
         let ref_seq = &ref_seq;
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");

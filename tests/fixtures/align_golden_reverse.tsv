@@ -1,0 +1,2 @@
+reverse	rc	0	ref:0-58|0-58|rev=true|pri=true|sup=false|mapq=29|score=116|cigar=[(58, 7)]|cs=Some(":58")
+reverse	fwd_partial	NO_HIT

@@ -9,10 +9,11 @@ use std::{
 
 use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
 use asts::{
-    align_sbr_to_smc_worker, reporter::Reporter, subreads_and_smc_generator, utils::sort_by_tag,
+    align_sbr_to_smc_worker, bam_writer, reporter::Reporter, subreads_and_smc_generator,
+    utils::sort_by_tag,
 };
 use gskits;
-use mm2::gskits::{
+use gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     samtools::{samtools_bai, sort_by_coordinates},
 };
@@ -332,19 +333,11 @@ fn main() {
         drop(sbr_and_smc_recv);
         drop(align_res_sender);
 
-        let mm2_oup_params = mm2::params::OupParams {
-            discard_secondary: oup_params.discard_secondary,
-            discard_supplementary: oup_params.discard_supplementary,
-            oup_identity_threshold: oup_params.oup_identity_threshold,
-            oup_coverage_threshold: oup_params.oup_coverage_threshold,
-            discard_multi_align_reads: oup_params.discard_multi_align_reads,
-            pass_through_tags: oup_params.pass_through_tags.clone(),
-        };
-        mm2::bam_writer::write_bam_worker(
+        bam_writer::write_bam_worker(
             align_res_recv,
             target2idx,
             &o_path,
-            &mm2_oup_params,
+            oup_params,
             "asts",
             env!("CARGO_PKG_VERSION"),
             true,

@@ -1,4 +1,10 @@
-use mm2::{mapping_ext::MappingExt, minimap2};
+//! 同聚物/等价区内的 gap 左对齐（eqx CIGAR 的规范化）。
+//!
+//! 入参是引擎无关的 [`Hit`]，结果写回 `Hit::cigar_ops`。
+//! 注意：`cs` / `MD` **不重建**，与迁移前行为保持一致（当时同样只改 CIGAR）。
+
+use super::cigar::aligned_2_str;
+use super::Hit;
 
 const GAP: u8 = '-' as u8;
 
@@ -82,15 +88,8 @@ fn aligned_pair_seqs_2_cigar(aligned_target: &[u8], aligned_seq: &[u8]) -> Vec<(
     cigars
 }
 
-pub fn cigar_adjust_poly_gap_left_align(
-    hit: &mut minimap2::Mapping,
-    target_seq: &[u8],
-    query_seq: &[u8],
-) {
-    // hit.alignment.unwrap().cigar
-    let hit_ext = MappingExt(hit);
-
-    let (mut aligned_target, mut aligned_seq) = hit_ext.aligned_2_str(target_seq, query_seq);
+pub fn cigar_adjust_poly_gap_left_align(hit: &mut Hit, target_seq: &[u8], query_seq: &[u8]) {
+    let (mut aligned_target, mut aligned_seq) = aligned_2_str(hit, target_seq, query_seq);
 
     let aligned_target = unsafe { aligned_target.as_bytes_mut() };
     let aligned_seq = unsafe { aligned_seq.as_bytes_mut() };
@@ -108,32 +107,22 @@ pub fn cigar_adjust_poly_gap_left_align(
         }
     }
 
-    // println!("{:?}", hit.alignment.as_ref().unwrap().cigar);
-    let new_cigars = aligned_pair_seqs_2_cigar(aligned_target, aligned_seq);
-    hit.alignment.as_mut().unwrap().cigar = Some(new_cigars);
+    hit.cigar_ops = aligned_pair_seqs_2_cigar(aligned_target, aligned_seq);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use minimap2::{Alignment, Mapping, Strand};
 
     /// 构造一个 Forward 链、覆盖 target[..tend]/query[..qend] 的 hit
-    fn make_hit(cigar: Vec<(u32, u8)>, tend: usize, qend: usize) -> Mapping {
-        Mapping {
-            strand: Strand::Forward,
+    fn make_hit(cigar: Vec<(u32, u8)>, tend: usize, qend: usize) -> Hit {
+        Hit {
+            target_len: tend,
             target_start: 0,
-            target_end: tend as i32,
+            target_end: tend,
             query_start: 0,
-            query_end: qend as i32,
-            alignment: Some(Alignment {
-                nm: 0,
-                cigar: Some(cigar),
-                cigar_str: None,
-                md: None,
-                cs: None,
-                alignment_score: None,
-            }),
+            query_end: qend,
+            cigar_ops: cigar,
             ..Default::default()
         }
     }
@@ -145,7 +134,7 @@ mod tests {
     ) -> Vec<(u32, u8)> {
         let mut hit = make_hit(cigar, target_seq.len(), query_seq.len());
         cigar_adjust_poly_gap_left_align(&mut hit, target_seq, query_seq);
-        hit.alignment.unwrap().cigar.unwrap()
+        hit.cigar_ops
     }
 
     #[test]

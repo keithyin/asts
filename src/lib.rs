@@ -9,30 +9,35 @@ use std::{
 
 use ::gskits::gsbam::{bam_header_ext::BamHeaderExt, bam_record_ext::BamRecordExt};
 use crossbeam::channel::Sender;
-use minimap2::{Aligner, PresetSet};
-pub use mm2;
-use mm2::gskits::{self, utils::ScopedTimer};
-use mm2::{mapping_ext::MappingExt, NoMemLeakAligner};
-use params::{AlignParams, InputFilterParams, MapParams, OupParams, TOverrideAlignerParam};
+use gskits::{self, utils::ScopedTimer};
+use params::{AlignParams, InputFilterParams, MapParams, OupParams, TOverrideAlignSetup};
 use read_info::ReadInfo;
 use reporter::Reporter;
 use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
 use tracing_subscriber::EnvFilter;
 
+use crate::align::{
+    build_aligner, cigar, cigar_adjust::cigar_adjust_poly_gap_left_align, AlignSetup, RefAligner,
+};
+
+pub mod align;
+pub mod bam_writer;
 pub mod mapping2record;
-pub mod mm2_ext;
 pub mod params;
 pub mod read_info;
 pub mod reporter;
 pub mod sbr_and_cs_to_cs;
 pub mod sbr_and_ref_to_cs;
 pub mod utils;
-// use mm2::cigar_adjust::cigar_adjust_poly_gap_left_align;
-use mm2_ext::cigar_adjust::cigar_adjust_poly_gap_left_align;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
 type BamRecord = rust_htslib::bam::record::Record;
+
+/// 一批比对结果（每个 SMC channel 一次）。
+pub struct AlignResult {
+    pub records: Vec<BamRecord>,
+}
 
 pub struct SubreadsAndSmc {
     pub smc: ReadInfo,
@@ -218,7 +223,7 @@ pub fn subreads_and_smc_generator(
 
 pub fn align_sbr_to_smc_worker<T>(
     recv: crossbeam::channel::Receiver<SubreadsAndSmc>,
-    sender: Sender<mm2::AlignResult>,
+    sender: Sender<AlignResult>,
     target_idx: &HashMap<T, (usize, usize)>,
     map_params: &params::MapParams,
     align_params: &params::AlignParams,
@@ -284,7 +289,7 @@ pub fn align_sbr_to_smc_worker<T>(
             max_time_qname = subreads_and_smc.smc.name.clone();
         }
 
-        let align_res = mm2::AlignResult {
+        let align_res = AlignResult {
             records: align_infos,
         };
         out_sbrs += align_res.records.len();
@@ -325,92 +330,56 @@ pub fn align_sbr_to_smc<T>(
 where
     T: std::borrow::Borrow<str> + Eq + Hash,
 {
-    let aligner = build_asts_aligner(
+    let setup = build_sbr_to_smc_setup(
         subreads_and_smc.smc.seq.len() < 200,
         fallback,
         map_params,
         align_params,
     );
 
-    let aligner: NoMemLeakAligner = aligner
-        .with_seq_and_id(
-            subreads_and_smc.smc.seq.as_bytes(),
-            subreads_and_smc.smc.name.as_bytes(),
-        )
-        // .with_seq(subreads_and_smc.smc.seq.as_bytes())
-        .unwrap()
-        .into();
+    let ref_aligner: Box<dyn RefAligner> = build_aligner(
+        &setup,
+        subreads_and_smc.smc.seq.as_bytes(),
+        &subreads_and_smc.smc.name,
+    );
+
+    let smc_seq = subreads_and_smc.smc.seq.as_bytes();
 
     let mut bam_records = vec![];
     let mut no_hit_subreads_idx = vec![];
 
     sbr_indices.into_iter().for_each(|i| {
         let subread = &subreads_and_smc.subreads[i];
+        let query_seq = subread.seq.as_bytes();
 
-        let mut extra_flags = vec![];
-        extra_flags.push(0x4000000); // eqx
-        extra_flags.push(0x40000000); // sam hit only
+        let mut hits = ref_aligner.map(&subread.name, query_seq);
 
-        // if !subread.name.starts_with("ref") {
-        //     if align_params.fwd_only {
-        //         extra_flags.push(1048576);
-        //     }
-        //     if align_params.rev_only {
-        //         extra_flags.push(2097152);
-        //     }
-        // }
-
-        let hits = aligner
-            .map(
-                subread.seq.as_bytes(),
-                true,
-                true,
-                None,
-                Some(&extra_flags),
-                Some(subread.name.as_bytes()),
-            )
-            .unwrap();
-
-        let mut has_hit = false;
-        for mut hit in hits {
-            has_hit = true;
+        let has_hit = !hits.is_empty();
+        for hit in hits.iter_mut() {
             // no supp is needed !!
             if align_params.poly_n_gap_left_align {
-                cigar_adjust_poly_gap_left_align(
-                    &mut hit,
-                    subreads_and_smc.smc.seq.as_bytes(),
-                    subread.seq.as_bytes(),
-                );
+                cigar_adjust_poly_gap_left_align(hit, smc_seq, query_seq);
             }
 
-            // mm2::visualization::blast_like_alignment(&subread.seq, &subreads_and_smc.smc.seq, &hit, None);
-
-            let hit_ext = MappingExt(&hit);
-            let identity = hit_ext.identity_gap_compressed();
-            let coverage = hit_ext.query_coverage().max(hit_ext.target_coverage());
+            let identity = cigar::identity_gap_compressed(hit);
+            let coverage = cigar::query_coverage(hit, query_seq.len()).max(cigar::target_coverage(hit));
             if coverage < oup_params.oup_coverage_threshold
                 || identity < oup_params.oup_identity_threshold
             {
                 continue;
             }
 
-            if !subread.name.starts_with("ref")
-                && align_params.fwd_only
-                && hit.strand.eq(&minimap2::Strand::Reverse)
-            {
+            if !subread.name.starts_with("ref") && align_params.fwd_only && hit.is_reverse {
                 continue;
             }
 
-            if !subread.name.starts_with("ref")
-                && align_params.rev_only
-                && hit.strand.eq(&minimap2::Strand::Forward)
-            {
+            if !subread.name.starts_with("ref") && align_params.rev_only && !hit.is_reverse {
                 continue;
             }
 
             if hit.is_primary && !hit.is_supplementary {
                 let bam_record =
-                    mapping2record::build_bam_record_from_mapping(&hit, subread, target_idx);
+                    mapping2record::build_bam_record_from_mapping(hit, subread, target_idx);
                 bam_records.push(bam_record);
                 break;
             }
@@ -426,58 +395,49 @@ where
 
 /// https://github.com/PacificBiosciences/actc/blob/main/src/PancakeAligner.cpp#L128
 /// https://github.com/lh3/minimap2/blob/master/minimap.h
-fn build_asts_aligner(
+///
+/// 把 subread→SMC 比对所需的引擎参数翻译成与引擎无关的 [`AlignSetup`]。
+fn build_sbr_to_smc_setup(
     short_insert: bool,
     fallback: bool,
     map_params: &MapParams,
     align_params: &AlignParams,
-) -> Aligner<PresetSet> {
-    let mut aligner = Aligner::builder()
-        .map_ont()
-        .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-        .with_sam_out()
-        .with_index_threads(1);
-
-    if !short_insert {
-        aligner.idxopt.set_hpc();
-    }
-
-    aligner.mapopt.best_n = 1;
-    // aligner.mapopt.q_occ_frac = 0.0;
-
-    if !fallback {
-        aligner.idxopt.k = 12;
-        aligner.idxopt.w = 5;
+) -> AlignSetup {
+    let (k, w) = if short_insert {
+        if !fallback {
+            (4, 1)
+        } else {
+            (3, 1)
+        }
+    } else if !fallback {
+        (12, 5)
     } else {
-        aligner.idxopt.k = 7;
-        aligner.idxopt.w = 5;
-    }
+        (7, 5)
+    };
+
+    let mut setup = AlignSetup {
+        preset: crate::align::Preset::MapOnt,
+        k: Some(k),
+        w: Some(w),
+        // 短插入不加 hpc
+        hpc: !short_insert,
+        best_n: Some(1),
+        short_insert,
+        // subread→smc 需要 cs 与 md tag
+        emit_cs: true,
+        emit_md: true,
+        sam_hit_only: true,
+        secondary_seq: false,
+        ..Default::default()
+    };
 
     // this is all map-ont default
-    // aligner.mapopt.zdrop = 400;
-    // aligner.mapopt.zdrop_inv = 200;
-    // aligner.mapopt.bw = 500;
-    // aligner.mapopt.end_bonus = 0;
+    // zdrop = 400; zdrop_inv = 200; bw = 500; end_bonus = 0;
 
-    if short_insert {
-        if !fallback {
-            aligner.idxopt.k = 4;
-            aligner.idxopt.w = 1;
-        } else {
-            aligner.idxopt.k = 3;
-            aligner.idxopt.w = 1;
-        }
+    map_params.modify_setup(&mut setup);
+    align_params.modify_setup(&mut setup);
 
-        aligner.mapopt.min_cnt = 2;
-        aligner.mapopt.min_dp_max = 10; // min dp score
-        aligner.mapopt.min_chain_score = 10; // this is important for short insert
-        aligner.mapopt.min_ksw_len = 0;
-    }
-
-    map_params.modify_aligner(&mut aligner);
-    align_params.modify_aligner(&mut aligner);
-
-    aligner
+    setup
 }
 
 pub fn draw_aligned_seq(
@@ -535,8 +495,7 @@ pub fn draw_aligned_seq(
 
 #[cfg(test)]
 mod tests {
-    use mm2::gskits::fastx_reader::fasta_reader::FastaFileReader;
-    use mm2::NoMemLeakAligner;
+    use gskits::fastx_reader::fasta_reader::FastaFileReader;
 
     use crate::mapping2record::build_bam_record_from_mapping;
 
@@ -582,106 +541,67 @@ mod tests {
         let ref_fa = gskits::fastx_reader::read_fastx(ref_fa);
         let ref_fa = &ref_fa[0];
 
-        let mut aligner = minimap2::Aligner::builder()
-            .map_ont()
-            .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-            .with_sam_out()
-            .with_index_threads(1);
+        let setup = AlignSetup {
+            k: Some(7),
+            w: Some(5),
+            emit_cs: true,
+            emit_md: true,
+            sam_hit_only: true,
+            ..Default::default()
+        };
 
-        aligner.idxopt.k = 7;
-        aligner.idxopt.w = 5;
-
-        let aligner = aligner
-            .with_seq_and_id(ref_fa.seq.as_bytes(), ref_fa.name.as_bytes())
-            // .with_seq(subreads_and_smc.smc.seq.as_bytes())
-            .unwrap();
-
-        let hits = aligner
-            .map(
-                query_fa.seq.as_bytes(),
-                true,
-                true,
-                None,
-                Some(&[0x4000000, 0x40000000]),
-                Some(query_fa.name.as_bytes()),
-            )
-            .unwrap();
-
-        for hit in hits {
+        let aligner = build_aligner(&setup, ref_fa.seq.as_bytes(), &ref_fa.name);
+        for hit in aligner.map(&query_fa.name, query_fa.seq.as_bytes()) {
             println!("query2ref {:?}", hit)
         }
 
-        let mut aligner = minimap2::Aligner::builder()
-            .map_ont()
-            .with_cigar() // cigar_str has bug in minimap2="0.1.20+minimap2.2.28"
-            .with_sam_out()
-            .with_index_threads(1);
-
-        aligner.idxopt.k = 7;
-        aligner.idxopt.w = 5;
-
-        let aligner = aligner
-            .with_seq_and_id(query_fa.seq.as_bytes(), query_fa.name.as_bytes())
-            // .with_seq(subreads_and_smc.smc.seq.as_bytes())
-            .unwrap();
-
-        let hits = aligner
-            .map(
-                ref_fa.seq.as_bytes(),
-                true,
-                true,
-                None,
-                Some(&[0x4000000, 0x40000000]),
-                Some(ref_fa.name.as_bytes()),
-            )
-            .unwrap();
-
-        for hit in hits {
+        let aligner = build_aligner(&setup, query_fa.seq.as_bytes(), &query_fa.name);
+        for hit in aligner.map(&ref_fa.name, ref_fa.seq.as_bytes()) {
             println!("ref2query {:?}", hit)
         }
     }
 
     #[test]
     fn test_build_aligner() {
-        let aligner = build_asts_aligner(
+        let setup = build_sbr_to_smc_setup(
             true,
             false,
             &params::MapParams::default(),
             &params::AlignParams::default(),
         );
-        println!("{:?}", aligner.idxopt);
-        println!("{:?}", aligner.mapopt);
+        println!("{:#?}", setup);
 
-        let aligner = build_asts_aligner(
+        let setup = build_sbr_to_smc_setup(
             false,
             false,
             &params::MapParams::default(),
             &params::AlignParams::default(),
         );
-        println!("{:?}", aligner.idxopt);
-        println!("{:?}", aligner.mapopt);
+        println!("{:#?}", setup);
+        assert_eq!(setup.k, Some(12));
+        assert_eq!(setup.w, Some(5));
+        assert!(setup.hpc);
     }
 
     #[test]
     fn test_short_insert() {
-        let aligner = build_asts_aligner(
+        let setup = build_sbr_to_smc_setup(
             true,
             false,
             &params::MapParams::default(),
             &params::AlignParams::default(),
         );
-        println!("{:?}", aligner.idxopt);
-        println!("{:?}", aligner.mapopt);
-        println!("\n\n\n");
+        println!("{:#?}", setup);
+        assert!(!setup.hpc);
+        assert!(setup.short_insert);
+        assert_eq!(setup.k, Some(4));
+        assert_eq!(setup.w, Some(1));
 
         let ref_seq = "CCCCTTTTAAAAGGGGGAGAGA";
         let q_seq = "CCCCTTTTAAAAGGGGGAGAGA";
-        let aligner = NoMemLeakAligner(aligner.with_seq(ref_seq.as_bytes()).unwrap());
+        let aligner = build_aligner(&setup, ref_seq.as_bytes(), "ref");
 
-        for hit in aligner
-            .map(q_seq.as_bytes(), false, false, None, None, Some(b"query"))
-            .unwrap()
-        {
+        for hit in aligner.map("query", q_seq.as_bytes()) {
             println!("{:?}", hit);
         }
     }
@@ -693,37 +613,25 @@ mod tests {
 CCCTCCGCAGAAGGTAATAAAATGAAAAAGGAGAGAGACGTGACAGCCCGGAATCGCCCTGTCACATCTGGGTGATTAACAGGTTGCTGCTATTCGCCTTTCAAAGGGCCGATCGAGGAACACCTTTCTCCAGTCCGTGGACGCGTGGATACGTGTACAGATACCAGCTCGCCGATACGCTGTGCCGTGACGCACCTGCATCGGTCGCGGCTTTACAGCAACATCACCACGAACCATGCGTACACAGCCGCCGCATCTGCTAAAACCCATAACCACCAGCTTGACGCGCGCAGCTTTCCATCGCGTCCAGA
 AAGCCTCAATCAGTGCAACCAGGCCCCGGGTTTCGATCATTCCTAATGCTTCCATTGTGTTTCCTCTTATATCAGGTCCAGAACGGACCGTTCATTCACAACCGTGTTTGTAAACGGCTTTCGCGGTCACTTCCTGTCTGACGCGGCACGCTGGCCACCAGCGCCAGCTCGATTATTTCTTGCACGCTACAACCACGAGAGAGAGAGATCGTGCATCGGCCGGCAAGTCCCTTGTATCAGTGGCCGACGGCACGATATCCGCCGGTCGTTGTGCGATTTTTAACCATATTTCCGGGCTTCCAGCGACAGGA
 AAAACCATCACATTGGCCTTGCCTGTAGCGGGCTGGCAGGCAGCTTTTTGCGCCCCACTTCCGCACGAGGCAGGCGTCACAACTGTAACTCGCCTCCACACCAGCTTTGGTGCAGCGCTCACGGACTGATTTCTGGCCGCTGCTGGACGTTAGCAACAACCGGGGTGACGGGCGCTACCATTGCTGGAAAACGACACGCCACGCGTCGGCTCTTCCCGGTGATGGCGCGCCAGGTTTCGGCACTCAGCAAA";
-        let aligner = build_asts_aligner(
+        let setup = build_sbr_to_smc_setup(
             false,
             false,
             &params::MapParams::default(),
             &params::AlignParams::default(),
         );
-        let aligner = aligner
-            .with_seq_and_id(icing_reads.as_bytes(), b"icing")
-            .unwrap();
+        let aligner = build_aligner(&setup, icing_reads.as_bytes(), "icing");
         let mut target_idx = HashMap::new();
         target_idx.insert("icing".to_string(), (0, icing_reads.len()));
-        for hit in aligner
-            .map(
-                sbr.as_bytes(),
-                false,
-                false,
-                None,
-                Some(&[0x4000000, 0x40000000]),
-                Some(b"sbr"),
-            )
-            .unwrap()
-        {
+        let query_len = sbr.len();
+        for hit in aligner.map("sbr", sbr.as_bytes()) {
             if hit.is_primary {
-                let hit_ext = MappingExt(&hit);
                 println!(
                     "identity_gap_compressed:{}",
-                    hit_ext.identity_gap_compressed()
+                    cigar::identity_gap_compressed(&hit)
                 );
-                println!("identity:{}", hit_ext.identity());
-                println!("query_coverage:{}", hit_ext.query_coverage());
-                println!("target_coverage:{}", hit_ext.target_coverage());
+                println!("identity:{}", cigar::identity(&hit));
+                println!("query_coverage:{}", cigar::query_coverage(&hit, query_len));
+                println!("target_coverage:{}", cigar::target_coverage(&hit));
                 let query_record = ReadInfo::new_fa_record("name".to_string(), sbr.to_string());
                 let record = build_bam_record_from_mapping(&hit, &query_record, &target_idx);
 

@@ -12,7 +12,7 @@ use crate::{
 };
 use crate::{sbr_and_ref_to_cs::MsaResult, SubreadsAndSmc};
 use crossbeam::channel::Sender;
-use mm2::gskits::{phreq::phreq_list_2_quality, utils::ScopedTimer};
+use gskits::{phreq::phreq_list_2_quality, utils::ScopedTimer};
 
 use tracing;
 

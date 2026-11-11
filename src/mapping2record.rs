@@ -6,6 +6,8 @@ use rust_htslib::bam::record::{Aux, AuxArray};
 
 pub use gskits;
 
+use crate::align::cigar::ops_to_record_cigar;
+use crate::align::Hit;
 use crate::read_info::ReadInfo;
 
 pub type BamRecord = rust_htslib::bam::record::Record;
@@ -13,38 +15,28 @@ pub type BamWriter = rust_htslib::bam::Writer;
 pub type BamReader = rust_htslib::bam::Reader;
 
 pub fn build_bam_record_from_mapping<T>(
-    hit: &minimap2::Mapping,
+    hit: &Hit,
     query_record: &ReadInfo,
     target_idx: &HashMap<T, (usize, usize)>,
 ) -> BamRecord
 where
     T: std::borrow::Borrow<str> + Eq + Hash,
 {
-    // println!("{:?}", hit);
-
     let mut bam_record = BamRecord::new();
 
     let mut seq = Cow::Borrowed(query_record.seq.as_str());
-    let mut is_rev = false;
-
-    match hit.strand {
-        minimap2::Strand::Reverse => {
-            is_rev = true;
-            seq = Cow::Owned(String::from_utf8(reverse_complement(seq.as_bytes())).unwrap());
-        }
-        _ => {}
-    };
+    let is_rev = hit.is_reverse;
 
     if is_rev {
+        seq = Cow::Owned(String::from_utf8(reverse_complement(seq.as_bytes())).unwrap());
         bam_record.set_reverse();
     }
 
     // hit.query_start, hit.query_end 是相对于原始 query 而言的(即 未 reverse 的 query 而言)
-    let aln_info = hit.alignment.as_ref().unwrap();
-    let cigar_str = mm2::convert_mapping_cigar_to_record_cigar(
-        aln_info.cigar.as_ref().unwrap(),
-        hit.query_start as usize,
-        hit.query_end as usize,
+    let cigar_str = ops_to_record_cigar(
+        &hit.cigar_ops,
+        hit.query_start,
+        hit.query_end,
         seq.len(),
         is_rev,
     );
@@ -74,11 +66,11 @@ where
     bam_record.set_mpos(-1);
     // bam_record.set_mpos(mpos);
     // bam_record.reference_end()
-    bam_record.set_mapq(hit.mapq as u8);
+    bam_record.set_mapq(hit.mapq);
 
     bam_record.set_tid(
         target_idx
-            .get(hit.target_name.as_ref().unwrap().as_str())
+            .get(hit.target_name.as_str())
             .unwrap()
             .0 as i32,
     );
@@ -100,13 +92,13 @@ where
     }
     bam_record.unset_unmapped();
 
-    if let Some(cs) = aln_info.cs.as_ref() {
+    if let Some(cs) = hit.cs.as_ref() {
         bam_record
             .push_aux(b"cs", rust_htslib::bam::record::Aux::String(cs))
             .unwrap();
     }
 
-    if let Some(md) = aln_info.md.as_ref() {
+    if let Some(md) = hit.md.as_ref() {
         bam_record
             .push_aux(b"md", rust_htslib::bam::record::Aux::String(md))
             .unwrap();

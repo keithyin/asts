@@ -14,7 +14,7 @@ use asts::{
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag,
 };
 use crossbeam::channel::Receiver;
-use mm2::gskits::{
+use gskits::{
     fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
     pbar::{self, DEFAULT_INTERVAL},
 };
