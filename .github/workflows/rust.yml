@@ -16,7 +16,51 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    # rust-htslib 0.49 通过 hts-sys 的 bindgen 把 HTSlib（捆绑 1.19.1，BGZF/sam_hdr_t
+    # 均为完整定义）翻译成 Rust 绑定。若 runner 上参与解析的头文件/libclang 与之不匹配，
+    # bindgen 会把结构体生成为不透明类型（只剩 `_address` 字段），导致 rust-htslib
+    # 编译失败（E0609）。这里显式安装 libclang 与系统 HTSlib（1.19），把 CI 环境固定成
+    # 与本机验证过的一致。背景与判据见 docs/ci-htslib-opaque-structs.md
+    - name: Install libclang and htslib headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libhts-dev
+        sudo apt-get install -y libclang-18-dev clang-18 \
+          || sudo apt-get install -y libclang-dev clang
+        LIBCLANG_PATH=$(llvm-config-18 --libdir 2>/dev/null \
+          || llvm-config --libdir 2>/dev/null \
+          || echo /usr/lib/llvm-18/lib)
+        echo "LIBCLANG_PATH=$LIBCLANG_PATH" | tee -a "$GITHUB_ENV"
+
+    # 失败时这些信息必须已经打印过，才能判断是哪个环节的版本漂移
+    - name: Diagnose toolchain and deps
+      run: |
+        echo "== clang =="
+        { clang --version || clang-18 --version || true; } 2>&1 | head -3
+        echo "LIBCLANG_PATH=$LIBCLANG_PATH"
+        ls -l "$LIBCLANG_PATH"/libclang.so* 2>/dev/null || true
+        echo "== system htslib =="
+        pkg-config --modversion htslib 2>/dev/null || echo "no system htslib"
+        echo "== resolved hts deps =="
+        cargo tree -i hts-sys --locked || true
+        cargo tree -i rust-htslib --locked || true
+
+    # --locked：强制使用提交里的 Cargo.lock，避免 runner 侧重新解析依赖版本
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --locked --verbose
+
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --locked --verbose
+
+    # 若仍然失败，把 hts-sys 生成的绑定打出来：BGZF/sam_hdr_t 若只剩 _address，
+    # 说明 bindgen 解析到的不是捆绑的 HTSlib 1.19 头文件
+    - name: Dump hts-sys bindings (on failure)
+      if: failure()
+      run: |
+        shopt -s nullglob
+        for f in target/debug/build/hts-sys-*/out/bindings.rs; do
+          echo "--- $f"
+          grep -n -A 8 "pub struct BGZF" "$f" | head -20 || true
+          grep -n -A 12 "pub struct sam_hdr_t" "$f" | head -26 || true
+        done

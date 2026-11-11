@@ -244,6 +244,7 @@ scripts/compare_asts_runs.py --a old.bam --b new.bam --threshold 0.999
 | identity 全 0 / `eqx required` panic | 没开 `eqx` |
 | 命中集合整体不同 | 漏了 `.mid_occ(1000)` |
 | 内存暴涨 | `rammap-core` 的 `parallel` feature 没关，或线程数过高 |
+| 编译期 `hts_sys::BGZF` / `sam_hdr_t` 缺字段（`_address`） | htslib 绑定问题，见 [`ci-htslib-opaque-structs.md`](ci-htslib-opaque-structs.md) |
 
 ## 9. rammap 升级 SOP
 
