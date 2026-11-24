@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 未发布（建议 1.5.0）— BAM 读写栈迁移：rust-htslib → noodles
+## 1.5.0（2026-11-24）— BAM 读写栈迁移：rust-htslib → noodles
 
 > 破坏性变更：库的公开类型 `BamRecord` 由 `rust_htslib::bam::Record` 变为
 > `noodles_sam::alignment::RecordBuf`；`BamWriter`/`BamReader` 别名移除。

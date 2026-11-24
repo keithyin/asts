@@ -1,6 +1,6 @@
 [package]
 name = "asts"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
 # noodles-bam 0.99 / noodles-sam 0.94 为 edition 2024，MSRV 1.91
 rust-version = "1.91"
