@@ -1,5 +1,12 @@
 # CI 排障：`hts_sys::BGZF` / `sam_hdr_t` 变成不透明结构体
 
+> **【已根治 · 2026-11】** 本文档描述的问题类已通过「迁移到 noodles」彻底解决：
+> asts 已完全移除 `rust-htslib`（连同 `gskits`），BAM/SAM 读写改用纯 Rust 的
+> `noodles-bam` / `noodles-sam`（见 `docs/CHANGELOG.md`）。构建不再依赖
+> bindgen / libclang / hts-sys / 系统 HTSlib 头文件，本文第 2-6 节描述的失败模式
+> 从根上不再可能出现。CI 中的 `libhts-dev` / `libclang` 安装与诊断步骤已无必要，
+> 可随本迁移一并清理。以下内容作为历史记录保留。
+
 > 症状记忆点：编译 `rust-htslib` 时报一批 `E0609`，提示 `available field is: _address`。
 > 关键词：`no field block_address on type hts_sys::BGZF`、`no field text on type sam_hdr_t`。
 

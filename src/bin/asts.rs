@@ -9,15 +9,13 @@ use std::{
 
 use asts::params::{AlignParams, InputFilterParams, MapParams, OupParams};
 use asts::{
-    align_sbr_to_smc_worker, bam_writer, reporter::Reporter, subreads_and_smc_generator,
-    utils::sort_by_tag,
+    align_sbr_to_smc_worker, bam_writer, gsbam::bam_record_ext::BamRecordExt,
+    reporter::Reporter, samtools::{samtools_bai, sort_by_coordinates},
+    subreads_and_smc_generator, utils::sort_by_tag,
 };
-use gskits;
-use gskits::{
-    fastx_reader::fastx2bam::{fasta2bam, fastq2bam},
-    samtools::{samtools_bai, sort_by_coordinates},
-};
-use rust_htslib::bam::Read;
+use asts::gsbam::fastx2bam::{fasta2bam, fastq2bam};
+use asts::sys_monitor::SysMon;
+use noodles_bam as bam;
 use time;
 use tracing_subscriber;
 
@@ -197,17 +195,20 @@ impl OupArgs {
 }
 
 fn build_target_to_idx(smc_bam: &str) -> HashMap<String, (usize, usize)> {
-    let mut reader = rust_htslib::bam::Reader::from_path(smc_bam).unwrap();
-    reader.set_threads(10).unwrap();
+    let mut reader = bam::io::reader::Builder::default()
+        .build_from_path(smc_bam)
+        .unwrap();
+    let header = reader.read_header().unwrap();
 
     let mut target2idx = HashMap::new();
 
-    for (idx, record) in reader.records().enumerate() {
+    for (idx, record) in reader.record_bufs(&header).enumerate() {
         let record = record.unwrap();
+        let record_ext = BamRecordExt::new(&record);
 
-        let qname = unsafe { String::from_utf8_unchecked(record.qname().to_owned()) };
+        let qname = record_ext.get_qname();
 
-        let qlen = record.seq_len();
+        let qlen = record.sequence().len();
         target2idx.insert(qname, (idx, qlen));
     }
     target2idx
@@ -236,7 +237,7 @@ fn main() {
         .init();
 
     let _monito_guard =
-        gskits::sys_monitor::SysMon::new(Duration::from_secs(30), "asts".to_string());
+        SysMon::new(Duration::from_secs(30), "asts".to_string());
     _monito_guard.start_monitor(None, None);
 
     let smc_fname = if args.io_args.smc.ends_with(".bam") {

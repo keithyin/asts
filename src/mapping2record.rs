@@ -1,18 +1,19 @@
 use std::{borrow::Cow, collections::HashMap, hash::Hash};
 
-use gskits::dna::reverse_complement;
+use noodles_core::Position;
+use noodles_sam as sam;
+use sam::alignment::record::{Flags, MappingQuality};
+use sam::alignment::record_buf::{data::field::Value, QualityScores, RecordBuf, Sequence};
+use sam::alignment::record::data::field::Tag;
+use sam::alignment::record_buf::data::field::value::Array;
 
-use rust_htslib::bam::record::{Aux, AuxArray};
-
-pub use gskits;
+use crate::dna::reverse_complement;
 
 use crate::align::cigar::ops_to_record_cigar;
 use crate::align::Hit;
 use crate::read_info::ReadInfo;
 
-pub type BamRecord = rust_htslib::bam::record::Record;
-pub type BamWriter = rust_htslib::bam::Writer;
-pub type BamReader = rust_htslib::bam::Reader;
+pub type BamRecord = sam::alignment::RecordBuf;
 
 pub fn build_bam_record_from_mapping<T>(
     hit: &Hit,
@@ -22,14 +23,11 @@ pub fn build_bam_record_from_mapping<T>(
 where
     T: std::borrow::Borrow<str> + Eq + Hash,
 {
-    let mut bam_record = BamRecord::new();
-
     let mut seq = Cow::Borrowed(query_record.seq.as_str());
     let is_rev = hit.is_reverse;
 
     if is_rev {
         seq = Cow::Owned(String::from_utf8(reverse_complement(seq.as_bytes())).unwrap());
-        bam_record.set_reverse();
     }
 
     // hit.query_start, hit.query_end 是相对于原始 query 而言的(即 未 reverse 的 query 而言)
@@ -42,166 +40,153 @@ where
     );
 
     let qual = if let Some(ref qual_) = query_record.qual {
-        if is_rev {
+        // 全 255 是 BAM 的 qual 缺失标记（如 fasta2bam 的占位值）：留空交给
+        // noodles encoder 自动填 0xFF×len，与 rust-htslib 写 255 的输出一致
+        // （noodles 校验 qual ≤ 93，255 不能直接写入）
+        if qual_.iter().all(|&v| v == 255) {
+            vec![]
+        } else if is_rev {
             qual_.iter().copied().rev().collect()
         } else {
             qual_.clone()
         }
     } else {
-        vec![255; seq.len()]
+        vec![]
     };
 
-    bam_record.set(
-        query_record.name.as_bytes(),
-        Some(&cigar_str),
-        seq.as_bytes(),
-        &qual,
-    );
+    let mut flags = Flags::empty();
     if is_rev {
-        bam_record.set_reverse();
+        flags |= Flags::REVERSE_COMPLEMENTED;
     }
 
-    // reference start
-    bam_record.set_pos(hit.target_start as i64);
-    bam_record.set_mpos(-1);
-    // bam_record.set_mpos(mpos);
-    // bam_record.reference_end()
-    bam_record.set_mapq(hit.mapq);
-
-    bam_record.set_tid(
-        target_idx
-            .get(hit.target_name.as_str())
-            .unwrap()
-            .0 as i32,
-    );
-    bam_record.set_mtid(-1);
-
+    // flag 组合与迁移前逐位一致：
+    // primary → 清 secondary/supplementary；非 primary → 置 secondary+supplementary；
+    // 再按 is_supplementary 收敛
     if hit.is_primary {
-        bam_record.unset_secondary();
-        bam_record.unset_supplementary();
+        flags &= !Flags::SECONDARY;
+        flags &= !Flags::SUPPLEMENTARY;
     } else {
-        bam_record.set_secondary();
-        bam_record.set_supplementary();
+        flags |= Flags::SECONDARY;
+        flags |= Flags::SUPPLEMENTARY;
     }
 
     if hit.is_supplementary {
-        bam_record.unset_secondary();
-        bam_record.set_supplementary();
+        flags &= !Flags::SECONDARY;
+        flags |= Flags::SUPPLEMENTARY;
     } else {
-        bam_record.unset_supplementary();
+        flags &= !Flags::SUPPLEMENTARY;
     }
-    bam_record.unset_unmapped();
+    flags &= !Flags::UNMAPPED;
+
+    let mut bam_record = RecordBuf::builder()
+        .set_name(query_record.name.as_bytes())
+        .set_flags(flags)
+        .set_sequence(Sequence::from(seq.as_bytes().to_vec()))
+        .set_quality_scores(QualityScores::from(qual))
+        .set_cigar(cigar_str)
+        .set_alignment_start(Position::try_from(hit.target_start as usize + 1).unwrap())
+        .set_reference_sequence_id(
+            target_idx
+                .get(hit.target_name.as_str())
+                .unwrap()
+                .0,
+        )
+        .build();
+
+    // 与 htslib 的 set_mapq 逐字节一致：255 表示缺失（noodles 用 None 表达，
+    // encoder 写出 0xFF）；0..=254 直接透传
+    *bam_record.mapping_quality_mut() = MappingQuality::new(hit.mapq);
+
+    let data = bam_record.data_mut();
 
     if let Some(cs) = hit.cs.as_ref() {
-        bam_record
-            .push_aux(b"cs", rust_htslib::bam::record::Aux::String(cs))
-            .unwrap();
+        data.insert(Tag::new(b'c', b's'), Value::String(cs.as_bytes().into()));
     }
 
     if let Some(md) = hit.md.as_ref() {
-        bam_record
-            .push_aux(b"md", rust_htslib::bam::record::Aux::String(md))
-            .unwrap();
+        data.insert(Tag::new(b'm', b'd'), Value::String(md.as_bytes().into()));
     }
 
     if let Some(np_) = query_record.np {
-        bam_record.push_aux(b"np", Aux::U16(np_ as u16)).unwrap();
+        data.insert(Tag::new(b'n', b'p'), Value::UInt16(np_ as u16));
     }
 
     if let Some(ch_) = query_record.ch {
-        bam_record.push_aux(b"ch", Aux::U32(ch_ as u32)).unwrap();
+        data.insert(Tag::new(b'c', b'h'), Value::UInt32(ch_ as u32));
     }
 
     if let Some(rq_) = query_record.rq {
-        bam_record.push_aux(b"rq", Aux::Float(rq_)).unwrap();
+        data.insert(Tag::new(b'r', b'q'), Value::Float(rq_));
     }
 
     if let Some(be_) = &query_record.be {
-        bam_record
-            .push_aux(b"be", Aux::ArrayU32(AuxArray::from(be_)))
-            .unwrap();
+        data.insert(
+            Tag::new(b'b', b'e'),
+            Value::Array(Array::UInt32(be_.clone())),
+        );
     }
 
     if let Some(dw_) = &query_record.dw {
-        if is_rev {
-            let dw_ = dw_.iter().copied().rev().collect::<Vec<_>>();
-            bam_record
-                .push_aux(b"dw", Aux::ArrayU8(AuxArray::from(&dw_)))
-                .unwrap();
+        let dw_ = if is_rev {
+            dw_.iter().copied().rev().collect::<Vec<_>>()
         } else {
-            bam_record
-                .push_aux(b"dw", Aux::ArrayU8(AuxArray::from(dw_)))
-                .unwrap();
-        }
+            dw_.clone()
+        };
+        data.insert(Tag::new(b'd', b'w'), Value::Array(Array::UInt8(dw_)));
     }
 
     if let Some(ar_) = &query_record.ar {
-        if is_rev {
-            let ar_ = ar_.iter().copied().rev().collect::<Vec<_>>();
-            bam_record
-                .push_aux(b"ar", Aux::ArrayU8(AuxArray::from(&ar_)))
-                .unwrap();
+        let ar_ = if is_rev {
+            ar_.iter().copied().rev().collect::<Vec<_>>()
         } else {
-            bam_record
-                .push_aux(b"ar", Aux::ArrayU8(AuxArray::from(ar_)))
-                .unwrap();
-        }
+            ar_.clone()
+        };
+        data.insert(Tag::new(b'a', b'r'), Value::Array(Array::UInt8(ar_)));
     }
 
     if let Some(cr_) = &query_record.cr {
-        if is_rev {
-            let cr_ = cr_.iter().copied().rev().collect::<Vec<_>>();
-            bam_record
-                .push_aux(b"cr", Aux::ArrayU8(AuxArray::from(&cr_)))
-                .unwrap();
+        let cr_ = if is_rev {
+            cr_.iter().copied().rev().collect::<Vec<_>>()
         } else {
-            bam_record
-                .push_aux(b"cr", Aux::ArrayU8(AuxArray::from(cr_)))
-                .unwrap();
-        }
+            cr_.clone()
+        };
+        data.insert(Tag::new(b'c', b'r'), Value::Array(Array::UInt8(cr_)));
     }
 
     if let Some(nn_) = &query_record.nn {
-        if is_rev {
-            let nn_ = nn_.iter().copied().rev().collect::<Vec<_>>();
-            bam_record
-                .push_aux(b"nn", Aux::ArrayU8(AuxArray::from(&nn_)))
-                .unwrap();
+        let nn_ = if is_rev {
+            nn_.iter().copied().rev().collect::<Vec<_>>()
         } else {
-            bam_record
-                .push_aux(b"nn", Aux::ArrayU8(AuxArray::from(nn_)))
-                .unwrap();
-        }
+            nn_.clone()
+        };
+        data.insert(Tag::new(b'n', b'n'), Value::Array(Array::UInt8(nn_)));
     }
 
     if let Some(wd_) = &query_record.wd {
-        let mut wd_ = Cow::Borrowed(wd_);
-        if is_rev {
-            wd_ = Cow::Owned(wd_.iter().copied().rev().collect::<Vec<_>>());
-        }
-        bam_record
-            .push_aux(b"wd", Aux::ArrayU8(AuxArray::from(wd_.as_ref())))
-            .unwrap();
+        let wd_ = if is_rev {
+            wd_.iter().copied().rev().collect::<Vec<_>>()
+        } else {
+            wd_.clone()
+        };
+        data.insert(Tag::new(b'w', b'd'), Value::Array(Array::UInt8(wd_)));
     }
 
     if let Some(sd_) = &query_record.sd {
-        let mut sd_ = Cow::Borrowed(sd_);
-        if is_rev {
-            sd_ = Cow::Owned(sd_.iter().copied().rev().collect::<Vec<_>>());
-        }
-        bam_record
-            .push_aux(b"sd", Aux::ArrayU8(AuxArray::from(sd_.as_ref())))
-            .unwrap();
+        let sd_ = if is_rev {
+            sd_.iter().copied().rev().collect::<Vec<_>>()
+        } else {
+            sd_.clone()
+        };
+        data.insert(Tag::new(b's', b'd'), Value::Array(Array::UInt8(sd_)));
     }
 
     if let Some(sp_) = &query_record.sp {
-        let mut sp_ = Cow::Borrowed(sp_);
-        if is_rev {
-            sp_ = Cow::Owned(sp_.iter().copied().rev().collect::<Vec<_>>());
-        }
-        bam_record
-            .push_aux(b"sp", Aux::ArrayU8(AuxArray::from(sp_.as_ref())))
-            .unwrap();
+        let sp_ = if is_rev {
+            sp_.iter().copied().rev().collect::<Vec<_>>()
+        } else {
+            sp_.clone()
+        };
+        data.insert(Tag::new(b's', b'p'), Value::Array(Array::UInt8(sp_)));
     }
 
     bam_record

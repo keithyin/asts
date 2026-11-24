@@ -14,19 +14,15 @@ use asts::{
 };
 use asts::{
     align::{build_aligner, AlignSetup, RefAligner},
+    fastx_reader::{read_fastx, FastaFileReader},
+    gsbam::bam_record_ext::BamRecordExt,
+    pbar::{self, DEFAULT_INTERVAL},
     reporter::Reporter, sbr_and_ref_to_cs::align_sbr_and_ref_to_cs_worker,
     sbr_and_ref_to_cs::MsaResult, subreads_and_smc_generator, utils::sort_by_tag,
 };
+use asts::gsbam::fastx2bam::{fasta2bam, fastq2bam};
 use crossbeam::channel::Receiver;
-use gskits::{
-    fastx_reader::{
-        fasta_reader::FastaFileReader,
-        fastx2bam::{fasta2bam, fastq2bam},
-        read_fastx,
-    },
-    pbar::{self, DEFAULT_INTERVAL},
-};
-use rust_htslib::bam::Read;
+use noodles_bam as bam;
 
 use time;
 use tracing_subscriber::{self, EnvFilter};
@@ -208,17 +204,20 @@ impl OupArgs {
 }
 
 fn build_target_to_idx(smc_bam: &str) -> HashMap<String, (usize, usize)> {
-    let mut reader = rust_htslib::bam::Reader::from_path(smc_bam).unwrap();
-    reader.set_threads(10).unwrap();
+    let mut reader = bam::io::reader::Builder::default()
+        .build_from_path(smc_bam)
+        .unwrap();
+    let header = reader.read_header().unwrap();
 
     let mut target2idx = HashMap::new();
 
-    for (idx, record) in reader.records().enumerate() {
+    for (idx, record) in reader.record_bufs(&header).enumerate() {
         let record = record.unwrap();
+        let record_ext = BamRecordExt::new(&record);
 
-        let qname = unsafe { String::from_utf8_unchecked(record.qname().to_owned()) };
+        let qname = record_ext.get_qname();
 
-        let qlen = record.seq_len();
+        let qlen = record.sequence().len();
         target2idx.insert(qname, (idx, qlen));
     }
     target2idx

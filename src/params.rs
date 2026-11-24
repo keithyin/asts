@@ -1,9 +1,7 @@
 use std::collections::HashSet;
 
-use gskits::{
-    gsbam::bam_record_ext::{BamRecord, BamRecordExt},
-    utils::Range,
-};
+use crate::gsbam::bam_record_ext::{BamRecord, BamRecordExt};
+use crate::utils::Range;
 
 use crate::align::AlignSetup;
 
@@ -268,11 +266,11 @@ impl OupParams {
     }
 
     pub fn valid(&self, record: &BamRecord) -> bool {
-        if self.discard_secondary && record.is_secondary() {
+        if self.discard_secondary && record.flags().is_secondary() {
             return false;
         }
 
-        if self.discard_supplementary && record.is_supplementary() {
+        if self.discard_supplementary && record.flags().is_supplementary() {
             return false;
         }
 

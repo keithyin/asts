@@ -15,17 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # 与 ci.yml 相同的 hts-sys/bindgen 环境固定步骤，保证发布前能在 CI 上完整编译
-    - name: Install libclang and htslib headers
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libhts-dev
-        sudo apt-get install -y libclang-18-dev clang-18 \
-          || sudo apt-get install -y libclang-dev clang
-        LIBCLANG_PATH=$(llvm-config-18 --libdir 2>/dev/null \
-          || llvm-config --libdir 2>/dev/null \
-          || echo /usr/lib/llvm-18/lib)
-        echo "LIBCLANG_PATH=$LIBCLANG_PATH" | tee -a "$GITHUB_ENV"
+    # BAM/SAM 读写已迁移到纯 Rust 的 noodles（rust-htslib / gskits 已移除），
+    # 构建不再依赖 bindgen / libclang / hts-sys / 系统 HTSlib 头文件。
+    # 历史背景见 docs/ci-htslib-opaque-structs.md（已根治）。
 
     - name: Build
       run: cargo build --locked --verbose

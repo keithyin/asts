@@ -26,9 +26,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use asts::align::{build_aligner, cigar, AlignSetup, Hit, Preset};
+use asts::dna::reverse_complement;
+use asts::fastx_reader::{read_fastx, FastaFileReader};
 use asts::mapping2record::build_bam_record_from_mapping;
 use asts::read_info::ReadInfo;
-use gskits::fastx_reader::{fasta_reader::FastaFileReader, read_fastx};
 
 const FIXTURE_DIR: &str = "tests/fixtures";
 
@@ -98,7 +99,13 @@ fn check_case(
             if hit.is_primary && !hit.is_supplementary {
                 let query_record = ReadInfo::new_fa_record(qname.clone(), qseq.clone());
                 let record = build_bam_record_from_mapping(hit, &query_record, &target_idx);
-                assert_eq!(record.pos(), hit.target_start as i64);
+                assert_eq!(
+                    record
+                        .alignment_start()
+                        .map(|p| usize::from(p) - 1)
+                        .unwrap(),
+                    hit.target_start
+                );
                 n_hit_records += 1;
             }
             actual.push(format!("{case}\t{qname}\t{rank}\t{}", hit_key(hit)));
@@ -249,7 +256,7 @@ fn golden_short_insert() {
 #[test]
 fn golden_reverse_strand() {
     let ref_seq = "ACGTTGCAAGTCCTAGGCTAACCGGTTACGATCGTAGCTAGCATCGATCGATCGTAGC";
-    let rc = String::from_utf8(gskits::dna::reverse_complement(ref_seq.as_bytes())).unwrap();
+    let rc = String::from_utf8(reverse_complement(ref_seq.as_bytes())).unwrap();
     let queries = vec![
         ("rc".to_string(), rc),
         (
@@ -273,7 +280,7 @@ fn golden_synthetic_panel() {
         queries.push((format!("fwd{i}"), q.clone()));
         queries.push((
             format!("rev{i}"),
-            String::from_utf8(gskits::dna::reverse_complement(q.as_bytes())).unwrap(),
+            String::from_utf8(reverse_complement(q.as_bytes())).unwrap(),
         ));
         queries.push((format!("trunc{i}"), q[80..q.len() - 80].to_string()));
     }

@@ -9,19 +9,17 @@ use crate::{
     align::{cigar, Hit, RefAligner},
     align_sbr_to_smc, mapping2record, read_info::ReadInfo, reporter::Reporter, utils::Range,
 };
-use crate::{params, SubreadsAndSmc};
+use crate::{gsbam, params, SubreadsAndSmc};
 use crossbeam::channel::Sender;
-use gskits::dna::reverse_complement;
-use gskits::{
-    gsbam::{
-        bam_record_ext::BamRecordExt, plp_counts_from_records::compute_max_ins_of_each_ref_position,
-    },
-    utils::ScopedTimer,
-};
-use rust_htslib::bam::{ext::BamRecordExtensions, Record};
+use crate::dna::reverse_complement;
+use crate::gsbam::bam_record_ext::BamRecordExt;
+use crate::gsbam::plp_counts::compute_max_ins_of_each_ref_position;
+use crate::utils::ScopedTimer;
 use tracing;
 
 use serde::Serialize;
+
+type Record = crate::gsbam::bam_record_ext::BamRecord;
 
 #[derive(Debug, Default)]
 struct Cs2RefAlnRes {
@@ -96,7 +94,7 @@ fn align_cs_to_ref(
             let query = BamRecordExt::new(&align_record).get_seq();
             let query_bytes = query.as_bytes();
 
-            for [qpos, rpos] in align_record.aligned_pairs_full() {
+            for [qpos, rpos] in gsbam::aligned_pairs::aligned_pairs_full(&align_record) {
                 if rpos.is_some() {
                     r_cursor = rpos;
                 }
@@ -597,7 +595,7 @@ pub fn build_msa_result_from_records(
     let strands = records
         .iter()
         .map(|record| {
-            if record.is_reverse() {
+            if record.flags().is_reverse_complemented() {
                 "rev".to_string()
             } else {
                 "fwd".to_string()
@@ -609,7 +607,7 @@ pub fn build_msa_result_from_records(
 
     let smc_ranges = ref_range.map(|v| get_ref_range_from_query_range(&records[0], v));
 
-    let major_pos_ins = compute_max_ins_of_each_ref_position(&records, None, None, None);
+    let major_pos_ins = compute_max_ins_of_each_ref_position(&records, None, None);
     let mut major_pos_ins_vec = major_pos_ins
         .iter()
         .map(|(&k, &v)| (k as usize, v as usize))
@@ -706,7 +704,7 @@ fn build_one_record_of_msa(
     let mut q_pos_cursor = None;
     let mut r_pos_cursor = None;
     let mut delta = 0;
-    for [qpos, rpos] in record.aligned_pairs_full() {
+    for [qpos, rpos] in gsbam::aligned_pairs::aligned_pairs_full(record) {
         if qpos.is_some() {
             q_pos_cursor = qpos;
         }
@@ -775,7 +773,7 @@ pub fn get_ref_range_from_query_range(record: &Record, range: &Range<usize>) -> 
     let mut qpos_cursor = None;
     let mut rpos_cursor = None;
     let mut ref_ranges = vec![];
-    for [qpos, rpos] in record.aligned_pairs_full() {
+    for [qpos, rpos] in gsbam::aligned_pairs::aligned_pairs_full(record) {
         if qpos.is_some() {
             qpos_cursor = qpos;
         }

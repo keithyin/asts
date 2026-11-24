@@ -5,29 +5,35 @@
 //! `identity_gap_compressed` 的阈值判断，任何取值差异都会放大成“命中集合漂移”。
 //! 历史实现的对应关系见 `docs/migration-mm2-to-rammap.md`。
 
-use gskits::dna::reverse_complement;
-use rust_htslib::bam::record::{Cigar, CigarString};
+use noodles_sam::alignment::record::cigar::op::{Kind, Op};
+use noodles_sam::alignment::record_buf::Cigar;
+
+use crate::dna::reverse_complement;
 
 use super::Hit;
 
-/// op 编码（0=M,1=I,2=D,3=N,4=S,5=H,7==,8=X）→ htslib Cigar。
-pub fn ops_to_htslib_cigar(cigar: &[(u32, u8)]) -> CigarString {
-    let ops = cigar
+/// op 编码（0=M,1=I,2=D,3=N,4=S,5=H,7==,8=X）→ noodles CIGAR op kind。
+pub fn op_code_to_kind(op: u8) -> Kind {
+    match op {
+        0 => Kind::Match,
+        1 => Kind::Insertion,
+        2 => Kind::Deletion,
+        3 => Kind::Skip,
+        4 => Kind::SoftClip,
+        5 => Kind::HardClip,
+        6 => Kind::Pad,
+        7 => Kind::SequenceMatch,
+        8 => Kind::SequenceMismatch,
+        v => panic!("invalid cigar op :{}", v),
+    }
+}
+
+/// op 编码（0=M,1=I,2=D,3=N,4=S,5=H,7==,8=X）→ noodles Cigar。
+pub fn ops_to_cigar(cigar: &[(u32, u8)]) -> Cigar {
+    cigar
         .iter()
-        .map(|&(cnt, op)| match op {
-            0 => Cigar::Match(cnt),
-            1 => Cigar::Ins(cnt),
-            2 => Cigar::Del(cnt),
-            3 => Cigar::RefSkip(cnt),
-            4 => Cigar::SoftClip(cnt),
-            5 => Cigar::HardClip(cnt),
-            6 => Cigar::Pad(cnt),
-            7 => Cigar::Equal(cnt),
-            8 => Cigar::Diff(cnt),
-            v => panic!("invalid cigar op :{}", v),
-        })
-        .collect::<Vec<_>>();
-    CigarString(ops)
+        .map(|&(cnt, op)| Op::new(op_code_to_kind(op), cnt as usize))
+        .collect()
 }
 
 /// 给比对区间的两侧补 soft clip，得到写 BAM 用的完整 CIGAR。
@@ -40,22 +46,26 @@ pub fn ops_to_record_cigar(
     query_end: usize,
     query_len: usize,
     is_rev: bool,
-) -> CigarString {
+) -> Cigar {
     let (query_start, query_end) = if is_rev {
         (query_len - query_end, query_len - query_start)
     } else {
         (query_start, query_end)
     };
 
-    let mut cigar_str = CigarString(vec![]);
+    let mut cigar_str: Vec<Op> = vec![];
     if query_start > 0 {
-        cigar_str.push(Cigar::SoftClip(query_start as u32));
+        cigar_str.push(Op::new(Kind::SoftClip, query_start));
     }
-    cigar_str.extend(ops_to_htslib_cigar(cigar).0);
+    cigar_str.extend(
+        cigar
+            .iter()
+            .map(|&(cnt, op)| Op::new(op_code_to_kind(op), cnt as usize)),
+    );
     if query_end != query_len {
-        cigar_str.push(Cigar::SoftClip((query_len - query_end) as u32));
+        cigar_str.push(Op::new(Kind::SoftClip, query_len - query_end));
     }
-    cigar_str
+    Cigar::from(cigar_str)
 }
 
 /// 把 hit 在 target/query 上的比对区间展开成两条等长字符串（gap 用 `-` 表示）。
@@ -179,12 +189,32 @@ mod tests {
 
     #[test]
     fn test_record_cigar_softclip() {
+        fn cigar_to_string(c: &Cigar) -> String {
+            use Kind::*;
+            let kind_str = |k: Kind| match k {
+                Match => "M",
+                Insertion => "I",
+                Deletion => "D",
+                Skip => "N",
+                SoftClip => "S",
+                HardClip => "H",
+                Pad => "P",
+                SequenceMatch => "=",
+                SequenceMismatch => "X",
+            };
+            c.as_ref()
+                .iter()
+                .map(|op| format!("{}{}", op.len(), kind_str(op.kind())))
+                .collect::<Vec<_>>()
+                .join("")
+        }
+
         let cigar = vec![(5, 7), (2, 2)];
         let c = ops_to_record_cigar(&cigar, 2, 9, 12, false);
-        assert_eq!(c.to_string(), "2S5=2D3S");
+        assert_eq!(cigar_to_string(&c), "2S5=2D3S");
 
         // reverse: forward q [2,9) -> rc 坐标 [3,10)
         let c = ops_to_record_cigar(&cigar, 2, 9, 12, true);
-        assert_eq!(c.to_string(), "3S5=2D2S");
+        assert_eq!(cigar_to_string(&c), "3S5=2D2S");
     }
 }

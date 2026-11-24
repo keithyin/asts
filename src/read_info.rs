@@ -1,7 +1,7 @@
 
 use std::collections::HashSet;
 
-use gskits::gsbam::bam_record_ext::{BamRecord, BamRecordExt};
+use crate::gsbam::bam_record_ext::{BamRecord, BamRecordExt};
 
 
 #[derive(Debug, Default)]
@@ -42,12 +42,12 @@ impl ReadInfo {
         qname_suffix: Option<&str>,
         tags: &HashSet<String>,
     ) -> Self {
-        let mut qname = unsafe { String::from_utf8_unchecked(record.qname().to_vec()) };
+        let mut qname = unsafe { String::from_utf8_unchecked(record.name().unwrap_or_default().to_vec()) };
         if let Some(suffix) = qname_suffix {
             qname.push_str(suffix);
         }
         let record_ext = BamRecordExt::new(record);
-        let seq = unsafe { String::from_utf8_unchecked(record.seq().as_bytes()) };
+        let seq = unsafe { String::from_utf8_unchecked(record.sequence().as_ref().to_vec()) };
 
         let dw = if tags.contains("dw") {
             record_ext
@@ -112,7 +112,7 @@ impl ReadInfo {
             ch: record_ext.get_ch(),
             np: record_ext.get_np().map(|v| v as u32),
             rq: record_ext.get_rq(),
-            qual: Some(record_ext.get_qual().to_vec()),
+            qual: Some(record_ext.get_qual()),
             dw: dw,
             ar: ar,
             cr: cr,

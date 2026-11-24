@@ -7,32 +7,37 @@ use std::{
     time::Instant,
 };
 
-use ::gskits::gsbam::{bam_header_ext::BamHeaderExt, bam_record_ext::BamRecordExt};
 use crossbeam::channel::Sender;
-use gskits::{self, utils::ScopedTimer};
+use noodles_bam as bam;
 use params::{AlignParams, InputFilterParams, MapParams, OupParams, TOverrideAlignSetup};
 use read_info::ReadInfo;
 use reporter::Reporter;
-use rust_htslib::bam::{ext::BamRecordExtensions, Read};
 use tracing;
-use tracing_subscriber::EnvFilter;
 
 use crate::align::{
     build_aligner, cigar, cigar_adjust::cigar_adjust_poly_gap_left_align, AlignSetup, RefAligner,
 };
+use crate::gsbam::bam_record_ext::BamRecordExt;
+use crate::utils::ScopedTimer;
 
 pub mod align;
 pub mod bam_writer;
+pub mod dna;
+pub mod fastx_reader;
+pub mod gsbam;
 pub mod mapping2record;
 pub mod params;
+pub mod pbar;
 pub mod read_info;
 pub mod reporter;
 pub mod sbr_and_cs_to_cs;
 pub mod sbr_and_ref_to_cs;
+pub mod samtools;
+pub mod sys_monitor;
 pub mod utils;
 
 // cCsSiIf int8, uint8, int16, uint16, int32, uint32, float
-type BamRecord = rust_htslib::bam::record::Record;
+pub type BamRecord = crate::gsbam::bam_record_ext::BamRecord;
 
 /// 一批比对结果（每个 SMC channel 一次）。
 pub struct AlignResult {
@@ -46,8 +51,8 @@ pub struct SubreadsAndSmc {
 }
 
 impl SubreadsAndSmc {
-    pub fn new(smc_record: &rust_htslib::bam::Record) -> Self {
-        let smc_len = smc_record.seq_len();
+    pub fn new(smc_record: &BamRecord) -> Self {
+        let smc_len = smc_record.sequence().len();
         Self {
             smc: ReadInfo::from_bam_record(smc_record, None, &HashSet::new()),
             smc_len: smc_len,
@@ -64,12 +69,8 @@ impl SubreadsAndSmc {
         }
     }
 
-    pub fn add_subread(
-        &mut self,
-        record: &rust_htslib::bam::Record,
-        tags: &HashSet<String>,
-    ) -> bool {
-        let sbr_len = record.seq_len() as f64;
+    pub fn add_subread(&mut self, record: &BamRecord, tags: &HashSet<String>) -> bool {
+        let sbr_len = record.sequence().len() as f64;
         let smc_len = self.smc_len as f64;
         let max_len = smc_len * 3.0;
         let min_len = smc_len * 0.0;
@@ -113,13 +114,16 @@ pub fn subreads_and_smc_generator(
 ) {
     tracing::info!("{input_filter_params:?}");
 
-    let n_threads = 2;
-    let mut smc_bam_reader = rust_htslib::bam::Reader::from_path(sorted_smc_bam).unwrap();
-    smc_bam_reader.set_threads(n_threads).unwrap();
-    let mut subreads_bam_reader = rust_htslib::bam::Reader::from_path(sorted_sbr_bam).unwrap();
-    subreads_bam_reader.set_threads(n_threads).unwrap();
+    let mut smc_bam_reader = bam::io::reader::Builder::default()
+        .build_from_path(sorted_smc_bam)
+        .unwrap();
+    let smc_header = smc_bam_reader.read_header().unwrap();
+    let mut subreads_bam_reader = bam::io::reader::Builder::default()
+        .build_from_path(sorted_sbr_bam)
+        .unwrap();
+    let sbr_header = subreads_bam_reader.read_header().unwrap();
 
-    let mut subreads_records = subreads_bam_reader.records();
+    let mut subreads_records = subreads_bam_reader.record_bufs(&sbr_header);
 
     let mut sbr_record_opt = subreads_records.next();
 
@@ -136,7 +140,7 @@ pub fn subreads_and_smc_generator(
         .to_uppercase()
         == "DEBUG";
 
-    for smc_record in smc_bam_reader.records() {
+    for smc_record in smc_bam_reader.record_bufs(&smc_header) {
         let smc_record = smc_record.unwrap();
 
         if sbr_record_opt.is_none() {
@@ -158,7 +162,7 @@ pub fn subreads_and_smc_generator(
         }
 
         let mut subreads_and_smc = SubreadsAndSmc::new(&smc_record);
-        let smc = gskits::gsbam::bam_record_ext::BamRecordExt::new(&smc_record);
+        let smc = crate::gsbam::bam_record_ext::BamRecordExt::new(&smc_record);
 
         loop {
             if sbr_record_opt.is_none() {
@@ -167,7 +171,7 @@ pub fn subreads_and_smc_generator(
             }
 
             let sbr = sbr_record_opt.as_ref().unwrap().as_ref().unwrap();
-            let sbr_ext = gskits::gsbam::bam_record_ext::BamRecordExt::new(sbr);
+            let sbr_ext = crate::gsbam::bam_record_ext::BamRecordExt::new(sbr);
 
             if sbr_ext.get_ch().unwrap() > smc.get_ch().unwrap() {
                 break;
@@ -449,9 +453,9 @@ pub fn draw_aligned_seq(
     let mut ref_aligned_seq = String::new();
     let mut query_aligned_seq = String::new();
 
-    let query_seq = record.seq().as_bytes();
+    let query_seq = record.sequence().as_ref();
     let mut rpos_cursor = None;
-    for [qpos, rpos] in record.aligned_pairs_full() {
+    for [qpos, rpos] in gsbam::aligned_pairs::aligned_pairs_full(record) {
         if rpos.is_some() {
             rpos_cursor = rpos;
         }
@@ -495,7 +499,7 @@ pub fn draw_aligned_seq(
 
 #[cfg(test)]
 mod tests {
-    use gskits::fastx_reader::fasta_reader::FastaFileReader;
+    use crate::fastx_reader::{read_fastx, FastaFileReader};
 
     use crate::mapping2record::build_bam_record_from_mapping;
 
@@ -534,11 +538,11 @@ mod tests {
     #[test]
     fn test_align2() {
         let query_fa = FastaFileReader::new("test_data/query.fa".to_string());
-        let query_fa = gskits::fastx_reader::read_fastx(query_fa);
+        let query_fa = read_fastx(query_fa);
         let query_fa = &query_fa[0];
 
         let ref_fa = FastaFileReader::new("test_data/ref.fa".to_string());
-        let ref_fa = gskits::fastx_reader::read_fastx(ref_fa);
+        let ref_fa = read_fastx(ref_fa);
         let ref_fa = &ref_fa[0];
 
         let setup = AlignSetup {
