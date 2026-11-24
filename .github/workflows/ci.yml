@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -10,8 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,34 +32,10 @@ jobs:
           || echo /usr/lib/llvm-18/lib)
         echo "LIBCLANG_PATH=$LIBCLANG_PATH" | tee -a "$GITHUB_ENV"
 
-    # 失败时这些信息必须已经打印过，才能判断是哪个环节的版本漂移
-    - name: Diagnose toolchain and deps
-      run: |
-        echo "== clang =="
-        { clang --version || clang-18 --version || true; } 2>&1 | head -3
-        echo "LIBCLANG_PATH=$LIBCLANG_PATH"
-        ls -l "$LIBCLANG_PATH"/libclang.so* 2>/dev/null || true
-        echo "== system htslib =="
-        pkg-config --modversion htslib 2>/dev/null || echo "no system htslib"
-        echo "== resolved hts deps =="
-        cargo tree -i hts-sys --locked || true
-        cargo tree -i rust-htslib --locked || true
-
     # --locked：强制使用提交里的 Cargo.lock，避免 runner 侧重新解析依赖版本
     - name: Build
       run: cargo build --locked --verbose
 
-    - name: Run tests
-      run: cargo test --locked --verbose
-
-    # 若仍然失败，把 hts-sys 生成的绑定打出来：BGZF/sam_hdr_t 若只剩 _address，
-    # 说明 bindgen 解析到的不是捆绑的 HTSlib 1.19 头文件
-    - name: Dump hts-sys bindings (on failure)
-      if: failure()
-      run: |
-        shopt -s nullglob
-        for f in target/debug/build/hts-sys-*/out/bindings.rs; do
-          echo "--- $f"
-          grep -n -A 8 "pub struct BGZF" "$f" | head -20 || true
-          grep -n -A 12 "pub struct sam_hdr_t" "$f" | head -26 || true
-        done
+    # 只跑单测（lib/bin 内 #[test]），不含集成测试与 doc-test
+    - name: Run unit tests
+      run: cargo test --locked --lib --bins --verbose

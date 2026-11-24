@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # 与 ci.yml 相同的 hts-sys/bindgen 环境固定步骤，保证发布前能在 CI 上完整编译
+    - name: Install libclang and htslib headers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libhts-dev
+        sudo apt-get install -y libclang-18-dev clang-18 \
+          || sudo apt-get install -y libclang-dev clang
+        LIBCLANG_PATH=$(llvm-config-18 --libdir 2>/dev/null \
+          || llvm-config --libdir 2>/dev/null \
+          || echo /usr/lib/llvm-18/lib)
+        echo "LIBCLANG_PATH=$LIBCLANG_PATH" | tee -a "$GITHUB_ENV"
+
+    - name: Build
+      run: cargo build --locked --verbose
+
+    - name: Run unit tests
+      run: cargo test --locked --lib --bins --verbose
+
+    # 发布前校验：meta 信息不合法会在这一步直接失败，而不是在真实发布时
+    - name: Verify crate can be packaged
+      run: cargo package --locked --allow-dirty
+
+    - name: Publish to crates.io
+      run: cargo publish --locked
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
