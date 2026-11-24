@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs, path,
     str::FromStr,
     sync::{Arc, Mutex},
@@ -88,6 +88,9 @@ pub struct IoArgs {
     )]
     pub max_subreads: Option<usize>,
 
+    #[arg(long = "channel-whitelist", help = "channel whitelist")]
+    pub channel_whitelist: Option<String>,
+
     #[arg(long = "fwd-only")]
     pub fwd_only: bool,
     #[arg(long = "rev-only")]
@@ -124,6 +127,15 @@ impl IoArgs {
 
         param
     }
+
+    pub fn channel_whitelist(&self) -> Option<HashSet<usize>> {
+        self.channel_whitelist.as_ref().map(|whitelist| {
+            whitelist
+                .split(",")
+                .map(|v| v.parse::<usize>().unwrap())
+                .collect::<HashSet<_>>()
+        })
+    }
 }
 
 #[derive(Debug, Args, Clone, Default)]
@@ -139,6 +151,9 @@ pub struct AlignArgs {
 
     #[arg(short = 'e', default_value_t=String::from_str("1,0").unwrap(), help = "gap_extension_penalty >=0")]
     gap_extension_penalty: String,
+
+    #[arg(long = "polyNGapLeftAlign", default_value_t = false)]
+    poly_n_gap_left_align: bool,
 }
 
 impl AlignArgs {
@@ -148,7 +163,8 @@ impl AlignArgs {
             .set_m_score(self.matching_score)
             .set_mm_score(self.mismatch_penalty)
             .set_gap_open_penalty(self.gap_open_penalty.clone())
-            .set_gap_extension_penalty(self.gap_extension_penalty.clone());
+            .set_gap_extension_penalty(self.gap_extension_penalty.clone())
+            .set_poly_n_gap_left_align(self.poly_n_gap_left_align);
 
         param
     }
@@ -280,6 +296,9 @@ fn main() {
 
     let max_subreads = args.io_args.max_subreads;
 
+    let channel_whitelist = args.io_args.channel_whitelist();
+    let channel_whitelist = channel_whitelist.as_ref();
+
     thread::scope(|s| {
         let tot_threads = args.threads.unwrap_or(num_cpus::get());
         assert!(tot_threads >= 10, "at least 10 threads");
@@ -303,7 +322,7 @@ fn main() {
                 oup_params,
                 sbr_and_smc_sender,
                 reporter_,
-                None,
+                channel_whitelist,
             );
         });
 
