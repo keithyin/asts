@@ -1,3 +1,10 @@
+# asts
+
+[![Crates.io](https://img.shields.io/crates/v/asts)](https://crates.io/crates/asts)
+[![Rust](https://img.shields.io/badge/rust-1.91%2B-orange)](https://www.rust-lang.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/keithyin/asts/blob/main/LICENSE)
+[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/keithyin/asts/ci.yml?branch=main&label=CI)](https://github.com/keithyin/asts/actions)
+
 ```
 # sbr2smc.aligned.bam and it's corresponding .bam file will be generated
 asts -q subreads.bam -t smc.bam -p sbr2smc.aligned
